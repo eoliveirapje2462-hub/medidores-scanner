@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Scanner de Medidores</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0b0f17;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #f3f4f6;
+  }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; background: #111827; border-bottom: 1px solid #1f2937;
+  }
+  .topbar h1 { font-size: 15px; margin: 0; font-weight: 700; }
+  .btn-fechar {
+    background: #374151; color: #fff; border: none; border-radius: 10px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .status {
+    text-align: center; padding: 10px 16px; font-size: 13px; color: #9ca3af;
+  }
+  .status.origem-ausente { color: #fbbf24; }
+  #reader { width: 100%; max-width: 480px; margin: 0 auto; border-radius: 0; }
+  #reader video { width: 100% !important; }
+  .aviso-permissao {
+    text-align: center; padding: 32px 20px; color: #9ca3af; font-size: 14px; line-height: 1.6;
+  }
+  .toast {
+    position: fixed; left: 16px; right: 16px; bottom: 20px; max-width: 440px; margin: 0 auto;
+    background: #059669; color: #fff; font-weight: 700; font-size: 14px;
+    border-radius: 12px; padding: 14px 18px; text-align: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    transform: translateY(120%); transition: transform 0.25s ease;
+    z-index: 50;
+  }
+  .toast.mostrar { transform: translateY(0); }
+  .toast.duplicado { background: #b45309; }
+  .contador {
+    text-align: center; font-size: 12px; color: #6b7280; padding: 6px 16px 14px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <h1>📷 Scanner de Medidores</h1>
+    <button class="btn-fechar" id="btnFechar">Fechar</button>
+  </div>
+
+  <div class="status" id="status">Iniciando câmera...</div>
+
+  <div id="reader"></div>
+  <div id="avisoPermissao" class="aviso-permissao" style="display:none;">
+    Não foi possível acessar a câmera.<br>
+    Verifique se você permitiu o acesso à câmera para este site nas configurações do navegador.
+  </div>
+
+  <div class="contador" id="contador">0 leituras enviadas nesta sessão</div>
+
+  <div class="toast" id="toast">Medidor enviado</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var params = new URLSearchParams(window.location.search);
+  var origemDestino = params.get("origin"); // origem do app do Apps Script que abriu esta janela
+
+  var statusEl = document.getElementById("status");
+  var toastEl = document.getElementById("toast");
+  var contadorEl = document.getElementById("contador");
+  var avisoPermissaoEl = document.getElementById("avisoPermissao");
+  var readerEl = document.getElementById("reader");
+
+  var ultimosCodigos = {};
+  var DEBOUNCE_MS = 4000;
+  var totalEnviados = 0;
+
+  if (!origemDestino) {
+    statusEl.textContent = "Aviso: nenhuma origem de destino foi informada na URL (?origin=...). As leituras não poderão ser enviadas.";
+    statusEl.classList.add("origem-ausente");
+  } else {
+    statusEl.textContent = "Aguardando leitura de medidor...";
+  }
+
+  function tocarBeep() {
+    try {
+      var AudioCtx = window.AudioContext || window.webkitAudioContext;
+      var ctx = new AudioCtx();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 1500;
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.18);
+    } catch (e) { /* dispositivo sem suporte a Web Audio */ }
+  }
+
+  function vibrar() {
+    if (navigator.vibrate) { navigator.vibrate(180); }
+  }
+
+  function mostrarToast(texto, duplicado) {
+    toastEl.textContent = texto;
+    toastEl.className = "toast mostrar" + (duplicado ? " duplicado" : "");
+    clearTimeout(toastEl._t);
+    toastEl._t = setTimeout(function () {
+      toastEl.classList.remove("mostrar");
+    }, 1600);
+  }
+
+  function validarCodigo(codigo) {
+    return typeof codigo === "string" && codigo.trim().length >= 6 && /^[A-Za-z0-9]+$/.test(codigo.trim());
+  }
+
+  function codigoRecemEnviado(codigo) {
+    var agora = Date.now();
+    var ultima = ultimosCodigos[codigo];
+    ultimosCodigos[codigo] = agora;
+    return ultima && (agora - ultima) < DEBOUNCE_MS;
+  }
+
+  function aoLerComSucesso(textoDecodificado) {
+    if (!validarCodigo(textoDecodificado)) { return; }
+    var codigo = textoDecodificado.trim();
+
+    if (codigoRecemEnviado(codigo)) {
+      mostrarToast("Já lido: " + codigo + " (ignorado)", true);
+      return;
+    }
+
+    tocarBeep();
+    vibrar();
+    mostrarToast("✓ Enviado: " + codigo, false);
+    totalEnviados++;
+    contadorEl.textContent = totalEnviados + (totalEnviados === 1 ? " leitura enviada nesta sessão" : " leituras enviadas nesta sessão");
+
+    if (window.opener && !window.opener.closed && origemDestino) {
+      window.opener.postMessage({ tipo: "medidor-scan", codigo: codigo }, origemDestino);
+    }
+  }
+
+  function iniciarCamera() {
+    var html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 12, qrbox: { width: 260, height: 160 } },
+      aoLerComSucesso,
+      function () { /* leitura sem sucesso momentânea, ignorar */ }
+    ).then(function () {
+      statusEl.textContent = origemDestino
+        ? "Aguardando leitura de medidor..."
+        : statusEl.textContent;
+    }).catch(function () {
+      readerEl.style.display = "none";
+      avisoPermissaoEl.style.display = "block";
+      statusEl.textContent = "Câmera indisponível";
+    });
+  }
+
+  document.getElementById("btnFechar").addEventListener("click", function () {
+    window.close();
+  });
+
+  iniciarCamera();
+})();
+</script>
+
+</body>
+</html>
