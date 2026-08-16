@@ -424,6 +424,15 @@ function submeter(){
   else{$("erroNumero").classList.remove("vis");}
   if(!estado.tipo){toast("Selecione Entrada ou Saída.","aviso");ok=false;}
   if(!ok){return;}
+  // Bloqueia mesmo número + mesmo tipo
+  var registros=lerRegistros();
+  var duplicado=registros.find(function(r){
+    return r.numero===numero.toUpperCase()&&r.tipo===estado.tipo;
+  });
+  if(duplicado){
+    toast("Já existe "+estado.tipo+" do medidor "+numero.toUpperCase()+"!","erro");
+    return;
+  }
   var agora=new Date();
   var reg={
     id:gerarId(),tecnico:nomeUsuario,numero:numero,tipo:estado.tipo,
