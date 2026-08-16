@@ -50,9 +50,12 @@ input[type=text]::placeholder { color: #4b5563; }
 #scannerModal.aberto { display: flex; }
 #scannerTopbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: #111827; border-bottom: 1px solid #1f2937; flex-shrink: 0; }
 #scannerTopbar span { font-size: 14px; font-weight: 700; }
-#scannerStatusBar { text-align: center; padding: 10px 16px; font-size: 13px; color: #9ca3af; flex-shrink: 0; }
+#scannerStatusBar { text-align: center; padding: 8px 16px; font-size: 13px; color: #9ca3af; flex-shrink: 0; }
 #reader { width: 100%; }
-#reader video { width: 100% !important; max-height: 52vh; object-fit: cover; }
+#reader video { width: 100% !important; max-height: 58vh; object-fit: cover; }
+/* Linha guia sobre o vídeo */
+#guiaLinha { position: absolute; left: 10%; right: 10%; height: 2px; background: #f87171; opacity: 0.85; pointer-events: none; top: 50%; transform: translateY(-50%); border-radius: 2px; display: none; }
+#readerWrap { position: relative; width: 100%; }
 .scanner-inner { padding: 20px 16px; flex: 1; overflow-y: auto; }
 #scannerContador { text-align: center; font-size: 12px; color: #4b5563; padding: 8px; flex-shrink: 0; }
 .passos { background: #111827; border-radius: 12px; padding: 16px; margin: 12px 0; font-size: 13px; color: #d1d5db; line-height: 1.9; }
@@ -63,6 +66,7 @@ input[type=text]::placeholder { color: #4b5563; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .lote-aviso { text-align: center; font-size: 12px; color: #34d399; margin-top: 8px; display: none; }
 .lote-aviso.vis { display: block; }
+.dica-scan { text-align: center; font-size: 11px; color: #6b7280; padding: 4px 16px 8px; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -73,7 +77,13 @@ input[type=text]::placeholder { color: #4b5563; }
     <button class="btn btn-gray" id="btnFecharScanner" style="width:auto;padding:8px 16px;font-size:13px;margin:0;">✕ Fechar</button>
   </div>
   <div id="scannerStatusBar">Iniciando câmera...</div>
-  <div id="reader"></div>
+  <div class="dica-scan" id="dicaScan"></div>
+
+  <div id="readerWrap">
+    <div id="reader"></div>
+    <div id="guiaLinha"></div>
+  </div>
+
   <div id="telaErro" class="scanner-inner" style="display:none;">
     <div style="font-size:15px;font-weight:700;color:#f87171;margin-bottom:8px;">🚫 Câmera bloqueada</div>
     <div style="font-size:13px;color:#9ca3af;margin-bottom:4px;">Siga os passos para liberar o acesso:</div>
@@ -87,12 +97,14 @@ input[type=text]::placeholder { color: #4b5563; }
     <button class="btn btn-indigo" id="btnTentarCamera">🔄 Tentar câmera novamente</button>
     <button class="btn btn-gray" id="btnIrManual">⌨️ Digitar código manualmente</button>
   </div>
+
   <div id="telaManual" class="scanner-inner" style="display:none;">
     <div style="font-size:14px;font-weight:700;margin-bottom:12px;">⌨️ Digitar código do medidor</div>
-    <input id="inputManual" type="text" placeholder="Ex: 00123456" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" maxlength="30" style="margin-bottom:12px;font-size:18px;letter-spacing:2px;" />
+    <input id="inputManual" type="text" placeholder="Ex: 5893867-0" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" maxlength="30" style="margin-bottom:12px;font-size:18px;letter-spacing:2px;" />
     <button class="btn btn-green" id="btnConfirmarManual">✓ Confirmar código</button>
     <div style="text-align:center;font-size:13px;color:#6366f1;cursor:pointer;text-decoration:underline;margin-top:10px;" id="btnVoltarCamera">↩ Tentar câmera novamente</div>
   </div>
+
   <div id="scannerContador"></div>
 </div>
 
@@ -122,8 +134,8 @@ input[type=text]::placeholder { color: #4b5563; }
   <div class="card">
     <div class="campo">
       <label>Número do Medidor / Série</label>
-      <input id="numeroMedidor" type="text" autocomplete="off" placeholder="Ex: 00123456" />
-      <div class="erro-campo" id="erroNumero">Mínimo de 4 caracteres alfanuméricos.</div>
+      <input id="numeroMedidor" type="text" autocomplete="off" placeholder="Ex: 5893867-0" />
+      <div class="erro-campo" id="erroNumero">Mínimo de 4 caracteres.</div>
     </div>
     <div class="campo">
       <label>Tipo de Movimentação</label>
@@ -234,19 +246,23 @@ input[type=text]::placeholder { color: #4b5563; }
   });
 
   function beep() { try{ var ctx=new(window.AudioContext||window.webkitAudioContext)(),osc=ctx.createOscillator(),g=ctx.createGain(); osc.type="sine";osc.frequency.value=1500;g.gain.setValueAtTime(0.2,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.18);osc.connect(g);g.connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+0.18); }catch(e){} }
-  function validar(c){ return typeof c==="string"&&c.trim().length>=4&&/^[A-Za-z0-9\-]+$/.test(c.trim()); }
+
+  // Validação: aceita letras, números e hífen, mínimo 4 chars
+  function validar(c){ return typeof c==="string" && c.trim().length>=4 && /^[A-Za-z0-9\-]+$/.test(c.trim()); }
   function recente(c){ var agora=Date.now(),u=estado.ultimosCodigos[c]; estado.ultimosCodigos[c]=agora; return u&&(agora-u)<DEBOUNCE; }
 
   function aoLer(texto) {
-    if(!validar(texto)){return;} var cod=texto.trim().toUpperCase();
+    if(!validar(texto)){return;}
+    // Normaliza: remove espaços, mantém hífen
+    var cod=texto.trim().toUpperCase();
     if(recente(cod)){toast("Já lido: "+cod+" (ignorado)","aviso");return;}
     beep(); if(navigator.vibrate){navigator.vibrate(180);}
     totalLidos++; $("scannerContador").textContent=totalLidos+(totalLidos===1?" leitura":" leituras")+" nesta sessão";
-    $("numeroMedidor").value=cod; toast("Medidor lido: "+cod,"info");
+    $("numeroMedidor").value=cod; toast("✓ Lido: "+cod,"info");
     if(estado.modoLote){submeter();}else{fecharScanner();}
   }
 
-  function mostrarReader(s){$("reader").style.display=s?"block":"none";}
+  function mostrarReader(s){$("reader").style.display=s?"block":"none"; $("guiaLinha").style.display=s?"block":"none";}
   function telaErro(){mostrarReader(false);$("telaErro").style.display="block";$("telaManual").style.display="none";$("scannerStatusBar").textContent="Câmera indisponível";}
   function telaManual(){mostrarReader(false);$("telaErro").style.display="none";$("telaManual").style.display="block";$("scannerStatusBar").textContent="Digitação manual";setTimeout(function(){$("inputManual").focus();},100);}
   function telaCamera(){$("telaErro").style.display="none";$("telaManual").style.display="none";mostrarReader(true);iniciarCamera();}
@@ -254,14 +270,47 @@ input[type=text]::placeholder { color: #4b5563; }
   function pararCamera(){if(estado.qr){estado.qr.stop().catch(function(){});estado.qr=null;}}
 
   function iniciarCamera(){
-    pararCamera(); $("scannerStatusBar").textContent="Iniciando câmera...";
+    pararCamera();
+    $("scannerStatusBar").textContent="Iniciando câmera...";
+    $("dicaScan").textContent="";
     estado.qr=new Html5Qrcode("reader");
-    estado.qr.start({facingMode:"environment"},{fps:12,qrbox:{width:260,height:160}},aoLer,function(){})
-      .then(function(){$("scannerStatusBar").textContent="Aguardando leitura...";})
-      .catch(function(err){console.warn("Câmera:",err);telaErro();});
+
+    // Configuração otimizada para códigos de barra estreitos de medidores
+    var config = {
+      fps: 20,                          // Mais frames por segundo = leitura mais rápida
+      qrbox: { width: 320, height: 120 }, // Área mais larga e baixa para código de barras
+      aspectRatio: 1.7,                 // Formato paisagem favorece código de barras
+      formatsToSupport: [               // Apenas formatos relevantes para medidores
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.QR_CODE
+      ]
+    };
+
+    estado.qr.start(
+      { facingMode:"environment" },
+      config,
+      aoLer,
+      function(){}
+    ).then(function(){
+      $("scannerStatusBar").textContent="Aponte para o código de barras";
+      $("dicaScan").textContent="📏 Mantenha o código dentro da área vermelha — aprox. 15cm de distância";
+    }).catch(function(err){
+      console.warn("Câmera:",err);
+      telaErro();
+    });
   }
 
-  function abrirScanner(){$("scannerModal").classList.add("aberto");$("telaErro").style.display="none";$("telaManual").style.display="none";mostrarReader(true);iniciarCamera();}
+  function abrirScanner(){
+    $("scannerModal").classList.add("aberto");
+    $("telaErro").style.display="none";
+    $("telaManual").style.display="none";
+    mostrarReader(true);
+    iniciarCamera();
+  }
   function fecharScanner(){pararCamera();$("scannerModal").classList.remove("aberto");}
 
   $("btnAbrirScanner").addEventListener("click",abrirScanner);
@@ -269,7 +318,11 @@ input[type=text]::placeholder { color: #4b5563; }
   $("btnTentarCamera").addEventListener("click",telaCamera);
   $("btnIrManual").addEventListener("click",telaManual);
   $("btnVoltarCamera").addEventListener("click",telaCamera);
-  $("btnConfirmarManual").addEventListener("click",function(){ var v=$("inputManual").value.trim().toUpperCase(); if(!validar(v)){toast("Código inválido (mín. 4 caracteres)","erro");return;} aoLer(v); $("inputManual").value=""; });
+  $("btnConfirmarManual").addEventListener("click",function(){
+    var v=$("inputManual").value.trim().toUpperCase();
+    if(!validar(v)){toast("Código inválido (mín. 4 caracteres)","erro");return;}
+    aoLer(v); $("inputManual").value="";
+  });
   $("inputManual").addEventListener("keydown",function(e){if(e.key==="Enter"){$("btnConfirmarManual").click();}});
 
   function gerarId(){return "cli-"+Date.now()+"-"+Math.floor(Math.random()*99999);}
@@ -285,7 +338,10 @@ input[type=text]::placeholder { color: #4b5563; }
     var reg={idCliente:gerarId(),numero:numero,tipo:estado.tipo,responsavel:resp,observacao:obs,lat:estado.lat,lng:estado.lng,precisao:estado.precisao};
     setCarregando(true);
     if(!navigator.onLine){enfileirar(reg);setCarregando(false);toast("Sem internet: salvo na fila offline.","aviso");limpar();return;}
-    salvarRegistro(reg,function(r){setCarregando(false);toast("✓ Registrado: "+r.id,"sucesso");limpar();},function(){setCarregando(false);enfileirar(reg);toast("Falha: salvo na fila offline.","aviso");limpar();});
+    salvarRegistro(reg,
+      function(r){setCarregando(false);toast("✓ Registrado: "+r.id,"sucesso");limpar();},
+      function(){setCarregando(false);enfileirar(reg);toast("Falha: salvo na fila offline.","aviso");limpar();}
+    );
   }
 
   $("btnSalvar").addEventListener("click",submeter);
