@@ -761,28 +761,33 @@ document.getElementById('btn-cadastrar').addEventListener('click', async () => {
 //  LICENÇA
 // ══════════════════════════════════════════
 async function verificarLicenca(isInit = false) {
-  // Tenta verificar online via JSONP (contorna CORS do Apps Script)
+  // Sempre verifica online — cache só usado se sem internet
   let status = null;
+  let online = false;
+
   try {
     status = await jsonpRequest(
       `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`,
       8000
     );
-    // salva cache
+    online = true;
+    // Atualiza cache com resultado fresco
     localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...status, cachedAt: Date.now() }));
   } catch (e) {
-    console.warn('Falha na verificação online:', e.message);
-    // tenta cache
+    console.warn('Sem internet — usando cache:', e.message);
+    // Offline: usa cache de até 3 dias
     const cached = localStorage.getItem('mc_licenca_cache');
     if (cached) {
       try {
         const c = JSON.parse(cached);
-        const ageMs = Date.now() - (c.cachedAt || 0);
-        const ageDias = ageMs / 86400000;
-        // cache válido por até 3 dias offline
+        const ageDias = (Date.now() - (c.cachedAt || 0)) / 86400000;
         if (ageDias < 3) {
           status = c;
-          console.log('Usando licença em cache (offline)');
+          console.log('Cache offline válido:', ageDias.toFixed(1), 'dias');
+        } else {
+          console.warn('Cache expirado — bloqueando por segurança');
+          // Cache velho demais sem internet → bloqueia
+          status = { situacao: 'BLOQUEADA', mensagem: 'Sem conexão há mais de 3 dias. Conecte-se para verificar sua licença.' };
         }
       } catch {}
     }
