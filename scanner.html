@@ -293,7 +293,7 @@
     background: #000;
     border-radius: var(--radius);
     overflow: hidden;
-    aspect-ratio: 4/3;
+    aspect-ratio: 16/9;
     margin-bottom: 16px;
     border: 1px solid var(--border);
   }
@@ -307,7 +307,7 @@
     pointer-events: none;
   }
   .scanner-frame {
-    width: 200px; height: 100px;
+    width: 260px; height: 120px;
     border: 2px solid var(--accent);
     border-radius: 8px;
     box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
@@ -315,8 +315,8 @@
   .scanner-line {
     position: absolute;
     top: 50%;
-    left: calc(50% - 100px);
-    width: 200px;
+    left: calc(50% - 130px);
+    width: 260px;
     height: 2px;
     background: var(--accent);
     box-shadow: 0 0 8px var(--accent);
@@ -604,7 +604,7 @@
 
     <div style="margin-bottom:14px;">
       <div class="scanner-wrap">
-        <video id="preview" playsinline></video>
+        <video id="preview" playsinline muted autoplay></video>
         <div class="scanner-overlay">
           <div class="scanner-frame"></div>
           <div class="scanner-line"></div>
@@ -923,45 +923,37 @@ function showTab(tab) {
 }
 
 // ══════════════════════════════════════════
-//  SCANNER — canvas frame-by-frame
+//  SCANNER
 // ══════════════════════════════════════════
 
 let ultimoCodigoVisto = '';
 let ultimaLeitura     = 0;
-let scanLoop          = null;
-let canvasEl          = null;
-let canvasCtx         = null;
-let zxingReader       = null;
 
 async function initScanner() {
-  // Canvas oculto para processar frames
-  canvasEl  = document.createElement('canvas');
-  canvasCtx = canvasEl.getContext('2d', { willReadFrequently: true });
-
-  // ZXing: decodificador de imagem estática (mais confiável que decodeFromStream)
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.CODE_128,
-    ZXing.BarcodeFormat.CODE_39,
-    ZXing.BarcodeFormat.CODE_93,
-    ZXing.BarcodeFormat.ITF,
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.QR_CODE,
-    ZXing.BarcodeFormat.DATA_MATRIX,
-  ]);
-  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-  zxingReader = new ZXing.MultiFormatReader();
-  zxingReader.setHints(hints);
-
-  await startCamera();
+  try {
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.CODE_93,
+      ZXing.BarcodeFormat.ITF,
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.QR_CODE,
+      ZXing.BarcodeFormat.DATA_MATRIX,
+    ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    codeReader = new ZXing.BrowserMultiFormatReader(hints);
+    await startCamera();
+  } catch (e) {
+    setStatus('Câmera não disponível — use o campo manual.');
+  }
 }
 
 async function startCamera() {
   if (cameraActive) return;
   setStatus('Iniciando câmera...');
   try {
-    // Resolução ideal para leitura — 1280x720 é o sweet spot
     const constraints = {
       video: {
         facingMode: useFrontCamera ? 'user' : { ideal: 'environment' },
@@ -981,7 +973,16 @@ async function startCamera() {
     document.getElementById('btn-cam-toggle').textContent = '⏸ Pausar';
     setStatus('Aponte para o código de barras');
 
-    iniciarLoopScan(video);
+    codeReader.decodeFromStream(currentStream, video, (result, err) => {
+      if (result) {
+        const code  = result.getText().trim();
+        const agora = Date.now();
+        if (code === ultimoCodigoVisto && agora - ultimaLeitura < 2000) return;
+        ultimoCodigoVisto = code;
+        ultimaLeitura     = agora;
+        onCodigoLido(code);
+      }
+    });
 
   } catch (e) {
     setStatus('⚠️ Permita acesso à câmera ou use o campo manual.');
@@ -989,49 +990,9 @@ async function startCamera() {
   }
 }
 
-function iniciarLoopScan(video) {
-  if (scanLoop) cancelAnimationFrame(scanLoop);
-
-  const tick = () => {
-    if (!cameraActive) return;
-
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      // Processa frame em 640x360 — rápido e suficiente para leitura
-      const W = 640, H = 360;
-      canvasEl.width  = W;
-      canvasEl.height = H;
-      canvasCtx.drawImage(video, 0, 0, W, H);
-
-      try {
-        const imageData = canvasCtx.getImageData(0, 0, W, H);
-        const luminance = new ZXing.RGBLuminanceSource(imageData.data, W, H);
-        const bitmap    = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
-        const result    = zxingReader.decode(bitmap);
-
-        if (result) {
-          const code  = result.getText().trim();
-          const agora = Date.now();
-          if (!(code === ultimoCodigoVisto && agora - ultimaLeitura < 2000)) {
-            ultimoCodigoVisto = code;
-            ultimaLeitura     = agora;
-            onCodigoLido(code);
-          }
-        }
-      } catch (_) {
-        // NotFoundException normal — nenhum código no frame
-      }
-    }
-
-    // ~15 fps — leve no CPU e veloz na leitura
-    scanLoop = setTimeout(() => requestAnimationFrame(tick), 66);
-  };
-
-  requestAnimationFrame(tick);
-}
-
 function stopCamera() {
   if (!cameraActive) return;
-  if (scanLoop) { clearTimeout(scanLoop); cancelAnimationFrame(scanLoop); scanLoop = null; }
+  codeReader?.reset?.();
   if (currentStream) {
     currentStream.getTracks().forEach(t => t.stop());
     currentStream = null;
