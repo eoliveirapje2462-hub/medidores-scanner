@@ -762,6 +762,8 @@ document.getElementById('btn-cadastrar').addEventListener('click', async () => {
 // ══════════════════════════════════════════
 async function verificarLicenca(isInit = false) {
   // Sempre verifica online — cache só usado se sem internet
+  // Limpa cache antigo que possa ter TRIAL/ATIVA salvo incorretamente
+  localStorage.removeItem('mc_licenca_cache');
   let status = null;
   let online = false;
 
@@ -771,8 +773,12 @@ async function verificarLicenca(isInit = false) {
       8000
     );
     online = true;
-    // Atualiza cache com resultado fresco
-    localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...status, cachedAt: Date.now() }));
+    // Se bloqueada/expirada, apaga cache para não sobrar resultado antigo
+    if (status.situacao === 'BLOQUEADA' || status.situacao === 'EXPIRADA') {
+      localStorage.removeItem('mc_licenca_cache');
+    } else {
+      localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...status, cachedAt: Date.now() }));
+    }
   } catch (e) {
     console.warn('Sem internet — usando cache:', e.message);
     // Offline: usa cache de até 3 dias
