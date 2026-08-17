@@ -341,6 +341,25 @@
     transition: border-color 0.2s;
   }
   .btn-cam.active { border-color: var(--accent); color: var(--accent); }
+
+  #btn-capturar {
+    width: 100%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 18px;
+    font-weight: 700;
+    padding: 16px;
+    cursor: pointer;
+    font-family: var(--font);
+    margin-bottom: 10px;
+    letter-spacing: 0.02em;
+    transition: background 0.15s, transform 0.1s;
+    box-shadow: 0 4px 16px rgba(59,130,246,0.35);
+  }
+  #btn-capturar:active { background: var(--accent-dark); transform: scale(0.97); }
+  #btn-capturar:disabled { opacity: 0.4; pointer-events: none; }
   #btn-torch.active { border-color: var(--yellow); color: var(--yellow); background: var(--yellow-glow); }
   .btn-cam:disabled { opacity: 0.4; pointer-events: none; }
 
@@ -611,6 +630,11 @@
         </div>
         <div class="scanner-status" id="cam-status">Iniciando câmera...</div>
       </div>
+
+      <!-- Botão de captura grande -->
+      <button id="btn-capturar" onclick="capturarFrame()">
+        📷 Capturar código
+      </button>
 
       <div class="scanner-controls">
         <button class="btn-cam" id="btn-cam-toggle" onclick="toggleCamera()">⏸ Pausar</button>
@@ -923,31 +947,34 @@ function showTab(tab) {
 }
 
 // ══════════════════════════════════════════
-//  SCANNER
+//  SCANNER — captura de frame
 // ══════════════════════════════════════════
 
-let ultimoCodigoVisto = '';
-let ultimaLeitura     = 0;
+let scanCanvas    = null;
+let scanCtx       = null;
+let zxingReader   = null;
+let scanLoop      = null;
 
 async function initScanner() {
-  try {
-    const hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-      ZXing.BarcodeFormat.CODE_128,
-      ZXing.BarcodeFormat.CODE_39,
-      ZXing.BarcodeFormat.CODE_93,
-      ZXing.BarcodeFormat.ITF,
-      ZXing.BarcodeFormat.EAN_13,
-      ZXing.BarcodeFormat.EAN_8,
-      ZXing.BarcodeFormat.QR_CODE,
-      ZXing.BarcodeFormat.DATA_MATRIX,
-    ]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    codeReader = new ZXing.BrowserMultiFormatReader(hints);
-    await startCamera();
-  } catch (e) {
-    setStatus('Câmera não disponível — use o campo manual.');
-  }
+  scanCanvas = document.createElement('canvas');
+  scanCtx    = scanCanvas.getContext('2d', { willReadFrequently: true });
+
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.CODE_128,
+    ZXing.BarcodeFormat.CODE_39,
+    ZXing.BarcodeFormat.CODE_93,
+    ZXing.BarcodeFormat.ITF,
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.QR_CODE,
+    ZXing.BarcodeFormat.DATA_MATRIX,
+  ]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  zxingReader = new ZXing.MultiFormatReader();
+  zxingReader.setHints(hints);
+
+  await startCamera();
 }
 
 async function startCamera() {
@@ -957,8 +984,8 @@ async function startCamera() {
     const constraints = {
       video: {
         facingMode: useFrontCamera ? 'user' : { ideal: 'environment' },
-        width:  { ideal: 1280 },
-        height: { ideal: 720 },
+        width:  { ideal: 1920 },
+        height: { ideal: 1080 },
       }
     };
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -968,21 +995,11 @@ async function startCamera() {
 
     torchTrack = currentStream.getVideoTracks()[0];
     cameraActive = true;
-    ultimoCodigoVisto = '';
-    ultimaLeitura = 0;
     document.getElementById('btn-cam-toggle').textContent = '⏸ Pausar';
-    setStatus('Aponte para o código de barras');
+    setStatus('Aponte e pressione 📷 para ler');
 
-    codeReader.decodeFromStream(currentStream, video, (result, err) => {
-      if (result) {
-        const code  = result.getText().trim();
-        const agora = Date.now();
-        if (code === ultimoCodigoVisto && agora - ultimaLeitura < 2000) return;
-        ultimoCodigoVisto = code;
-        ultimaLeitura     = agora;
-        onCodigoLido(code);
-      }
-    });
+    // Loop automático: tenta ler a cada 400ms sem travar a UI
+    iniciarAutoScan(video);
 
   } catch (e) {
     setStatus('⚠️ Permita acesso à câmera ou use o campo manual.');
@@ -990,9 +1007,95 @@ async function startCamera() {
   }
 }
 
+function iniciarAutoScan(video) {
+  if (scanLoop) clearInterval(scanLoop);
+
+  scanLoop = setInterval(async () => {
+    if (!cameraActive || video.readyState < 2) return;
+
+    // Usa resolução REAL do vídeo — sem reduzir
+    const W = video.videoWidth  || 1280;
+    const H = video.videoHeight || 720;
+    scanCanvas.width  = W;
+    scanCanvas.height = H;
+    scanCtx.drawImage(video, 0, 0, W, H);
+
+    try {
+      const img     = scanCtx.getImageData(0, 0, W, H);
+      const lum     = new ZXing.RGBLuminanceSource(img.data, W, H);
+      const bitmap  = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      const result  = zxingReader.decode(bitmap);
+      if (result) {
+        const code = result.getText().trim();
+        onCodigoLido(code);
+      }
+    } catch (_) {}
+
+  }, 400); // tenta a cada 400ms
+}
+
+// Captura manual — botão 📷
+async function capturarFrame() {
+  const video = document.getElementById('preview');
+  if (!cameraActive || video.readyState < 2) {
+    toast('Câmera não está ativa.', 'error');
+    return;
+  }
+
+  setStatus('📷 Processando...');
+  const W = video.videoWidth  || 1280;
+  const H = video.videoHeight || 720;
+  scanCanvas.width  = W;
+  scanCanvas.height = H;
+  scanCtx.drawImage(video, 0, 0, W, H);
+
+  // Tenta 3 estratégias em sequência
+  const strategies = [
+    // 1. Imagem completa
+    () => {
+      const img    = scanCtx.getImageData(0, 0, W, H);
+      const lum    = new ZXing.RGBLuminanceSource(img.data, W, H);
+      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      return zxingReader.decode(bitmap);
+    },
+    // 2. Região central (onde o frame de mira fica)
+    () => {
+      const x = Math.floor(W * 0.1), y = Math.floor(H * 0.3);
+      const w = Math.floor(W * 0.8), h = Math.floor(H * 0.4);
+      const img    = scanCtx.getImageData(x, y, w, h);
+      const lum    = new ZXing.RGBLuminanceSource(img.data, w, h);
+      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      return zxingReader.decode(bitmap);
+    },
+    // 3. Faixa horizontal central (código de barras)
+    () => {
+      const x = 0, y = Math.floor(H * 0.35);
+      const w = W, h = Math.floor(H * 0.30);
+      const img    = scanCtx.getImageData(x, y, w, h);
+      const lum    = new ZXing.RGBLuminanceSource(img.data, w, h);
+      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      return zxingReader.decode(bitmap);
+    },
+  ];
+
+  for (const strategy of strategies) {
+    try {
+      const result = strategy();
+      if (result) {
+        onCodigoLido(result.getText().trim());
+        return;
+      }
+    } catch (_) {}
+  }
+
+  setStatus('❌ Não leu — tente mais perto ou use o campo manual.');
+  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+  setTimeout(() => setStatus('Aponte e pressione 📷 para ler'), 2000);
+}
+
 function stopCamera() {
+  if (scanLoop) { clearInterval(scanLoop); scanLoop = null; }
   if (!cameraActive) return;
-  codeReader?.reset?.();
   if (currentStream) {
     currentStream.getTracks().forEach(t => t.stop());
     currentStream = null;
@@ -1001,7 +1104,6 @@ function stopCamera() {
   torchTrack = null;
   torchOn    = false;
   cameraActive = false;
-  ultimoCodigoVisto = '';
   document.getElementById('btn-cam-toggle').textContent = '▶ Iniciar';
   document.getElementById('btn-torch').classList.remove('active');
   document.getElementById('btn-torch').textContent = '🔦 Flash';
