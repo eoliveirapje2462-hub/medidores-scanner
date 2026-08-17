@@ -938,8 +938,8 @@ async function initScanner() {
     hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
     codeReader = new ZXing.BrowserMultiFormatReader(hints, {
-      delayBetweenScanAttempts: 80,   // tenta a cada 80ms (padrão: 500ms)
-      delayBetweenScanSuccess: 1500,  // aguarda 1.5s após leitura bem-sucedida
+      delayBetweenScanAttempts: 50,   // tenta a cada 50ms — máxima velocidade
+      delayBetweenScanSuccess: 300,   // 300ms após leitura, evita duplicatas mas não trava
     });
     await startCamera();
   } catch (e) {
@@ -970,7 +970,7 @@ async function startCamera() {
     const track = currentStream.getVideoTracks()[0];
     torchTrack = track;
     const caps = track.getCapabilities?.() || {};
-    document.getElementById('btn-torch').disabled = !caps.torch;
+    // torch: botão sempre clicável, tentamos acender de qualquer forma
 
     // Foco contínuo — refoca a cada 3s para manter nitidez
     clearInterval(focusInterval);
