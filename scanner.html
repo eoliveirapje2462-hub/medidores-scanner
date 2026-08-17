@@ -3,1450 +3,350 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<title>Meter Control – Bipagem de Medidores</title>
-
-<!-- Barcode scanning -->
-<script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
-
+<title>Controle de Medidores</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
-  :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #242736;
-    --border: #2e3347;
-    --accent: #3b82f6;
-    --accent-dark: #2563eb;
-    --accent-glow: rgba(59,130,246,0.18);
-    --green: #22c55e;
-    --green-glow: rgba(34,197,94,0.15);
-    --yellow: #f59e0b;
-    --yellow-glow: rgba(245,158,11,0.15);
-    --red: #ef4444;
-    --red-glow: rgba(239,68,68,0.15);
-    --text: #e2e8f0;
-    --text-muted: #64748b;
-    --text-dim: #94a3b8;
-    --radius: 12px;
-    --radius-sm: 8px;
-    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: var(--font);
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* ── SPLASH / LOADING ── */
-  #splash {
-    position: fixed; inset: 0;
-    background: var(--bg);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 20px; z-index: 1000;
-    transition: opacity 0.4s;
-  }
-  #splash.hidden { opacity: 0; pointer-events: none; }
-
-  .splash-logo {
-    width: 72px; height: 72px;
-    background: var(--accent);
-    border-radius: 18px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 36px;
-    box-shadow: 0 0 40px var(--accent-glow);
-  }
-  .splash-title { font-size: 22px; font-weight: 700; color: var(--text); }
-  .splash-sub { font-size: 13px; color: var(--text-muted); }
-  .spinner {
-    width: 28px; height: 28px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-top: 8px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── SCREENS ── */
-  .screen {
-    display: none;
-    min-height: 100vh;
-    padding: 0 0 80px;
-    animation: fadeIn 0.3s ease;
-  }
-  .screen.active { display: block; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-
-  /* ── CADASTRO ── */
-  #screen-cadastro {
-    display: none;
-    min-height: 100vh;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    flex-direction: column;
-    gap: 0;
-  }
-  #screen-cadastro.active {
-    display: flex;
-  }
-
-  .cadastro-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 32px 24px;
-    width: 100%;
-    max-width: 400px;
-  }
-  .cadastro-logo {
-    display: flex; align-items: center; gap: 12px;
-    margin-bottom: 28px;
-  }
-  .cadastro-logo-icon {
-    width: 44px; height: 44px;
-    background: var(--accent);
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px;
-  }
-  .cadastro-logo-text { font-size: 18px; font-weight: 700; }
-  .cadastro-logo-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
-
-  .cadastro-card h2 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
-  .cadastro-card p { font-size: 13px; color: var(--text-dim); margin-bottom: 24px; line-height: 1.5; }
-
-  .field-group { display: flex; flex-direction: column; gap: 14px; }
-  .field label { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; display: block; }
-  .field input {
-    width: 100%;
-    background: var(--bg);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-size: 15px;
-    padding: 12px 14px;
-    outline: none;
-    transition: border-color 0.2s;
-    font-family: var(--font);
-  }
-  .field input:focus { border-color: var(--accent); }
-  .field input::placeholder { color: var(--text-muted); }
-
-  .btn-primary {
-    width: 100%; margin-top: 20px;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: var(--radius-sm);
-    font-size: 15px; font-weight: 600;
-    padding: 14px;
-    cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
-    font-family: var(--font);
-  }
-  .btn-primary:active { background: var(--accent-dark); transform: scale(0.98); }
-  .btn-primary:disabled { opacity: 0.5; pointer-events: none; }
-
-  /* ── LICENÇA / BLOQUEIO ── */
-  #screen-licenca {
-    display: none;
-    min-height: 100vh;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    flex-direction: column;
-  }
-  #screen-licenca.active { display: flex; }
-
-  .licenca-card {
-    background: var(--surface);
-    border: 1.5px solid var(--border);
-    border-radius: 20px;
-    padding: 32px 24px;
-    width: 100%;
-    max-width: 400px;
-    text-align: center;
-  }
-  .licenca-icon { font-size: 48px; margin-bottom: 16px; }
-  .licenca-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-  .licenca-msg { font-size: 14px; color: var(--text-dim); line-height: 1.6; margin-bottom: 24px; }
-
-  .pix-box {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 16px;
-    margin-bottom: 20px;
-  }
-  .pix-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
-  .pix-key {
-    font-size: 16px; font-weight: 700; color: var(--accent);
-    word-break: break-all; margin-bottom: 4px;
-  }
-  .pix-desc { font-size: 12px; color: var(--text-dim); }
-
-  .btn-whatsapp {
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    width: 100%;
-    background: #25d366;
-    color: #fff;
-    border: none;
-    border-radius: var(--radius-sm);
-    font-size: 15px; font-weight: 600;
-    padding: 14px;
-    cursor: pointer;
-    text-decoration: none;
-    font-family: var(--font);
-    margin-bottom: 12px;
-  }
-  .btn-secondary {
-    width: 100%;
-    background: transparent;
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 14px;
-    padding: 12px;
-    cursor: pointer;
-    font-family: var(--font);
-  }
-
-  /* ── AVISO DE VENCIMENTO (banner no topo) ── */
-  #aviso-banner {
-    display: none;
-    background: linear-gradient(135deg, #92400e, #78350f);
-    border-bottom: 1px solid #b45309;
-    padding: 12px 16px;
-    font-size: 13px;
-    color: #fef3c7;
-    line-height: 1.4;
-    text-align: center;
-  }
-  #aviso-banner.show { display: block; }
-  #aviso-banner strong { color: #fde68a; }
-  #aviso-banner a { color: #fde68a; font-weight: 600; }
-
-  /* ── HEADER ── */
-  .header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 14px 16px 10px;
-    position: sticky; top: 0; z-index: 50;
-  }
-  .header-top {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 4px;
-  }
-  .header-logo { display: flex; align-items: center; gap: 10px; }
-  .header-logo-icon {
-    width: 32px; height: 32px;
-    background: var(--accent);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 16px;
-  }
-  .header-logo-name { font-size: 15px; font-weight: 700; }
-  .header-user { font-size: 12px; color: var(--text-muted); }
-  .header-badge {
-    font-size: 10px; font-weight: 600; padding: 3px 8px;
-    border-radius: 20px; text-transform: uppercase; letter-spacing: 0.05em;
-  }
-  .badge-trial { background: var(--yellow-glow); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
-  .badge-ativa { background: var(--green-glow); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
-  .badge-aviso { background: var(--yellow-glow); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
-
-  /* ── TABS ── */
-  .tabs {
-    display: flex;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-    position: sticky; top: 62px; z-index: 40;
-  }
-  .tab {
-    flex: 1; padding: 12px 8px;
-    background: none; border: none;
-    font-family: var(--font); font-size: 13px; font-weight: 500;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
-  }
-  .tab .tab-icon { font-size: 18px; }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-  /* ── CONTENT PANELS ── */
-  .panel { display: none; padding: 16px; }
-  .panel.active { display: block; }
-
-  /* ── CAMERA / SCANNER ── */
-  .scanner-wrap {
-    position: relative;
-    background: #000;
-    border-radius: var(--radius);
-    overflow: hidden;
-    aspect-ratio: 16/9;
-    margin-bottom: 16px;
-    border: 1px solid var(--border);
-  }
-  #preview {
-    width: 100%; height: 100%;
-    object-fit: cover; display: block;
-  }
-  .scanner-overlay {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: none;
-  }
-  .scanner-frame {
-    width: 260px; height: 120px;
-    border: 2px solid var(--accent);
-    border-radius: 8px;
-    box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
-  }
-  .scanner-line {
-    position: absolute;
-    top: 50%;
-    left: calc(50% - 130px);
-    width: 260px;
-    height: 2px;
-    background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
-    animation: scan 2s ease-in-out infinite;
-  }
-  @keyframes scan {
-    0%,100% { transform: translateY(-25px); opacity: 0.6; }
-    50% { transform: translateY(25px); opacity: 1; }
-  }
-  .scanner-status {
-    position: absolute; bottom: 10px; left: 0; right: 0;
-    text-align: center; font-size: 12px; color: #fff;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-  }
-
-  .scanner-controls { display: flex; gap: 10px; margin-bottom: 16px; }
-  .btn-cam {
-    flex: 1; background: var(--surface); border: 1.5px solid var(--border);
-    color: var(--text); border-radius: var(--radius-sm);
-    font-size: 14px; font-weight: 500;
-    padding: 11px 8px; cursor: pointer; font-family: var(--font);
-    transition: border-color 0.2s;
-  }
-  .btn-cam.active { border-color: var(--accent); color: var(--accent); }
-
-  #btn-capturar {
-    width: 100%;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: var(--radius-sm);
-    font-size: 18px;
-    font-weight: 700;
-    padding: 16px;
-    cursor: pointer;
-    font-family: var(--font);
-    margin-bottom: 10px;
-    letter-spacing: 0.02em;
-    transition: background 0.15s, transform 0.1s;
-    box-shadow: 0 4px 16px rgba(59,130,246,0.35);
-  }
-  #btn-capturar:active { background: var(--accent-dark); transform: scale(0.97); }
-  #btn-capturar:disabled { opacity: 0.4; pointer-events: none; }
-  #btn-torch.active { border-color: var(--yellow); color: var(--yellow); background: var(--yellow-glow); }
-  .btn-cam:disabled { opacity: 0.4; pointer-events: none; }
-
-  /* ── RESULTADO SCAN ── */
-  #resultado-container {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
-    margin-bottom: 16px;
-  }
-  .resultado-header {
-    padding: 12px 14px;
-    border-bottom: 1px solid var(--border);
-    font-size: 12px; font-weight: 600;
-    color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
-  }
-  .resultado-body { padding: 12px 14px; }
-  #campo-medidor {
-    width: 100%; background: var(--bg); border: 1.5px solid var(--border);
-    border-radius: var(--radius-sm); color: var(--text);
-    font-size: 18px; font-weight: 600; font-family: 'Courier New', monospace;
-    padding: 12px 14px; outline: none; transition: border-color 0.2s;
-    letter-spacing: 0.1em;
-  }
-  #campo-medidor:focus { border-color: var(--accent); }
-  #campo-medidor.success { border-color: var(--green); }
-  #campo-medidor.error { border-color: var(--red); }
-  .campo-hint { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
-
-  /* ── TIPO DE MOVIMENTAÇÃO ── */
-  .tipo-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
-  .tipo-btn {
-    flex: 1; padding: 14px 8px;
-    background: var(--surface); border: 1.5px solid var(--border);
-    border-radius: var(--radius-sm); color: var(--text-dim);
-    font-size: 14px; font-weight: 600; cursor: pointer;
-    font-family: var(--font);
-    transition: all 0.2s;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-  }
-  .tipo-btn .tipo-icon { font-size: 22px; }
-  .tipo-btn.entrada.selected { background: var(--green-glow); border-color: var(--green); color: var(--green); }
-  .tipo-btn.saida.selected { background: var(--red-glow); border-color: var(--red); color: var(--red); }
-
-  /* ── OBS ── */
-  .obs-wrap { margin-bottom: 16px; }
-  .obs-label { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; display: block; }
-  #campo-obs {
-    width: 100%; background: var(--surface); border: 1.5px solid var(--border);
-    border-radius: var(--radius-sm); color: var(--text);
-    font-size: 14px; padding: 10px 12px; outline: none;
-    font-family: var(--font); resize: none; transition: border-color 0.2s;
-    min-height: 64px;
-  }
-  #campo-obs:focus { border-color: var(--accent); }
-
-  /* ── REGISTRAR BTN ── */
-  #btn-registrar {
-    width: 100%;
-    background: var(--accent); color: #fff;
-    border: none; border-radius: var(--radius-sm);
-    font-size: 16px; font-weight: 700;
-    padding: 16px;
-    cursor: pointer; font-family: var(--font);
-    transition: background 0.2s, transform 0.1s;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-  }
-  #btn-registrar:active { background: var(--accent-dark); transform: scale(0.98); }
-  #btn-registrar:disabled { opacity: 0.5; pointer-events: none; }
-
-  /* ── TOAST ── */
-  #toast {
-    position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%);
-    background: var(--surface2); color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 24px; padding: 12px 20px;
-    font-size: 14px; font-weight: 500;
-    z-index: 200; white-space: nowrap;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
-    opacity: 0; pointer-events: none;
-    transition: opacity 0.25s;
-  }
-  #toast.show { opacity: 1; }
-  #toast.success { border-color: var(--green); color: var(--green); }
-  #toast.error { border-color: var(--red); color: var(--red); }
-  #toast.warn { border-color: var(--yellow); color: var(--yellow); }
-
-  /* ── HISTÓRICO ── */
-  .historico-stats {
-    display: grid; grid-template-columns: repeat(3,1fr);
-    gap: 10px; margin-bottom: 16px;
-  }
-  .stat-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 12px 10px; text-align: center;
-  }
-  .stat-val { font-size: 22px; font-weight: 800; }
-  .stat-val.green { color: var(--green); }
-  .stat-val.red { color: var(--red); }
-  .stat-val.blue { color: var(--accent); }
-  .stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-
-  .historico-list { display: flex; flex-direction: column; gap: 8px; }
-  .hist-item {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 12px 14px;
-    display: flex; align-items: center; gap: 12px;
-  }
-  .hist-tipo-badge {
-    width: 36px; height: 36px; border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 16px; flex-shrink: 0;
-  }
-  .hist-tipo-badge.entrada { background: var(--green-glow); }
-  .hist-tipo-badge.saida { background: var(--red-glow); }
-  .hist-info { flex: 1; min-width: 0; }
-  .hist-num { font-size: 14px; font-weight: 700; font-family: 'Courier New', monospace; letter-spacing: 0.05em; }
-  .hist-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-  .hist-obs { font-size: 11px; color: var(--text-dim); margin-top: 2px; font-style: italic; }
-  .hist-empty { text-align: center; padding: 40px 16px; color: var(--text-muted); font-size: 14px; }
-
-  .hist-controls { display: flex; gap: 8px; margin-bottom: 14px; }
-  .hist-filter {
-    flex: 1; background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); color: var(--text);
-    font-size: 13px; padding: 9px 12px;
-    font-family: var(--font); outline: none; cursor: pointer;
-  }
-  .btn-clear-hist {
-    background: var(--red-glow); border: 1px solid rgba(239,68,68,0.3);
-    color: var(--red); border-radius: var(--radius-sm);
-    font-size: 13px; padding: 9px 14px; cursor: pointer;
-    font-family: var(--font);
-  }
-
-  /* ── IMPRIMIR ── */
-  .btn-print {
-    width: 100%; background: var(--surface2); border: 1px solid var(--border);
-    color: var(--text); border-radius: var(--radius-sm);
-    font-size: 14px; padding: 12px; cursor: pointer;
-    font-family: var(--font); margin-bottom: 14px;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-  }
-
-  /* ── BOTTOM NAV (app real) ── */
-  .bottom-nav {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    display: flex; z-index: 50;
-  }
-  .nav-btn {
-    flex: 1; background: none; border: none;
-    color: var(--text-muted); cursor: pointer;
-    padding: 10px 4px; font-family: var(--font);
-    font-size: 11px; display: flex; flex-direction: column;
-    align-items: center; gap: 3px;
-    transition: color 0.2s;
-  }
-  .nav-btn .nav-icon { font-size: 22px; }
-  .nav-btn.active { color: var(--accent); }
-
-  @media print {
-    .bottom-nav, .tabs, .header, #aviso-banner, .scanner-controls, .tipo-toggle,
-    .obs-wrap, #btn-registrar, .btn-print, .hist-controls, .btn-clear-hist { display: none !important; }
-    body { background: #fff; color: #000; }
-    .screen { padding-bottom: 0; }
-  }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; margin: 0; padding: 0; }
+html, body { min-height: 100%; background: #0b0f17; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #f3f4f6; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: #111827; border-bottom: 1px solid #1f2937; }
+.topbar h1 { font-size: 15px; font-weight: 700; }
+.topbar p { font-size: 11px; color: #6b7280; margin-top: 2px; }
+.badge { display: flex; align-items: center; gap: 6px; background: #1f2937; border: 1px solid #374151; border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+.container { max-width: 480px; margin: 0 auto; padding: 16px; }
+.card { background: #111827; border: 1px solid #1f2937; border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+.row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.toggle-wrap { display: flex; align-items: center; gap: 8px; }
+.toggle-label { font-size: 12px; color: #9ca3af; }
+.toggle { position: relative; width: 44px; height: 24px; border-radius: 999px; background: #374151; border: none; cursor: pointer; transition: background .2s; flex-shrink: 0; }
+.toggle.on { background: #4f46e5; }
+.toggle-dot { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .2s; pointer-events: none; }
+.toggle.on .toggle-dot { transform: translateX(20px); }
+.btn { width: 100%; padding: 13px; border: none; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity .15s; margin-bottom: 8px; }
+.btn:active { opacity: .8; }
+.btn:last-child { margin-bottom: 0; }
+.btn-indigo { background: #4f46e5; }
+.btn-green  { background: #059669; }
+.btn-gray   { background: #374151; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.tipo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tipo-btn { padding: 12px; border: 1.5px solid #374151; border-radius: 12px; background: #1f2937; color: #9ca3af; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all .15s; }
+.tipo-btn.entrada { background: #064e3b; border-color: #10b981; color: #fff; }
+.tipo-btn.saida   { background: #7c2d12; border-color: #f97316; color: #fff; }
+label { display: block; font-size: 12px; color: #9ca3af; margin-bottom: 6px; font-weight: 500; }
+input[type=text] { width: 100%; background: #0b0f17; border: 1.5px solid #374151; border-radius: 10px; padding: 12px 14px; font-size: 14px; color: #fff; outline: none; transition: border-color .15s; }
+input[type=text]:focus { border-color: #6366f1; }
+input[type=text]::placeholder { color: #4b5563; }
+.campo { margin-bottom: 14px; }
+.erro-campo { font-size: 11px; color: #f87171; margin-top: 4px; display: none; }
+.erro-campo.vis { display: block; }
+.gps-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #6b7280; margin-bottom: 14px; }
+.gps-dot { width: 6px; height: 6px; border-radius: 50%; background: #374151; flex-shrink: 0; }
+.banner { background: #78350f33; border: 1px solid #92400e88; color: #fcd34d; font-size: 12px; border-radius: 10px; padding: 10px 14px; display: none; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.banner.vis { display: flex; }
+.banner button { background: none; border: none; color: #fcd34d; font-size: 12px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+#scannerModal { display: none; position: fixed; inset: 0; z-index: 100; background: #0b0f17; flex-direction: column; }
+#scannerModal.aberto { display: flex; }
+#scannerTopbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: #111827; border-bottom: 1px solid #1f2937; flex-shrink: 0; }
+#scannerTopbar span { font-size: 14px; font-weight: 700; }
+#scannerStatusBar { text-align: center; padding: 8px 16px; font-size: 13px; color: #9ca3af; flex-shrink: 0; }
+#reader { width: 100%; }
+#reader video { width: 100% !important; max-height: 58vh; object-fit: cover; }
+/* Linha guia sobre o vídeo */
+#guiaLinha { position: absolute; left: 10%; right: 10%; height: 2px; background: #f87171; opacity: 0.85; pointer-events: none; top: 50%; transform: translateY(-50%); border-radius: 2px; display: none; }
+#readerWrap { position: relative; width: 100%; }
+.scanner-inner { padding: 20px 16px; flex: 1; overflow-y: auto; }
+#scannerContador { text-align: center; font-size: 12px; color: #4b5563; padding: 8px; flex-shrink: 0; }
+.passos { background: #111827; border-radius: 12px; padding: 16px; margin: 12px 0; font-size: 13px; color: #d1d5db; line-height: 1.9; }
+.passos strong { color: #fff; }
+#toast { position: fixed; left: 16px; right: 16px; bottom: 20px; max-width: 460px; margin: 0 auto; border-radius: 12px; padding: 14px 18px; font-size: 14px; font-weight: 700; text-align: center; color: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.5); transform: translateY(120%); transition: transform .25s ease; z-index: 300; }
+#toast.show { transform: translateY(0); }
+.spinner { width: 18px; height: 18px; border: 3px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.lote-aviso { text-align: center; font-size: 12px; color: #34d399; margin-top: 8px; display: none; }
+.lote-aviso.vis { display: block; }
+.dica-scan { text-align: center; font-size: 11px; color: #6b7280; padding: 4px 16px 8px; flex-shrink: 0; }
 </style>
 </head>
 <body>
 
-<!-- SPLASH -->
-<div id="splash">
-  <div class="splash-logo">⚡</div>
-  <div class="splash-title">Meter Control</div>
-  <div class="splash-sub">Gestão de Medidores de Energia</div>
-  <div class="spinner"></div>
+<div id="scannerModal">
+  <div id="scannerTopbar">
+    <span>📷 Scanner de Medidores</span>
+    <button class="btn btn-gray" id="btnFecharScanner" style="width:auto;padding:8px 16px;font-size:13px;margin:0;">✕ Fechar</button>
+  </div>
+  <div id="scannerStatusBar">Iniciando câmera...</div>
+  <div class="dica-scan" id="dicaScan"></div>
+
+  <div id="readerWrap">
+    <div id="reader"></div>
+    <div id="guiaLinha"></div>
+  </div>
+
+  <div id="telaErro" class="scanner-inner" style="display:none;">
+    <div style="font-size:15px;font-weight:700;color:#f87171;margin-bottom:8px;">🚫 Câmera bloqueada</div>
+    <div style="font-size:13px;color:#9ca3af;margin-bottom:4px;">Siga os passos para liberar o acesso:</div>
+    <div class="passos">
+      <strong>Chrome Android:</strong><br>
+      1. Toque no 🔒 na barra de endereço<br>
+      2. Toque em <strong>Permissões</strong><br>
+      3. <strong>Câmera</strong> → <strong>Permitir</strong><br>
+      4. Recarregue a página e tente de novo
+    </div>
+    <button class="btn btn-indigo" id="btnTentarCamera">🔄 Tentar câmera novamente</button>
+    <button class="btn btn-gray" id="btnIrManual">⌨️ Digitar código manualmente</button>
+  </div>
+
+  <div id="telaManual" class="scanner-inner" style="display:none;">
+    <div style="font-size:14px;font-weight:700;margin-bottom:12px;">⌨️ Digitar código do medidor</div>
+    <input id="inputManual" type="text" placeholder="Ex: 5893867-0" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" maxlength="30" style="margin-bottom:12px;font-size:18px;letter-spacing:2px;" />
+    <button class="btn btn-green" id="btnConfirmarManual">✓ Confirmar código</button>
+    <div style="text-align:center;font-size:13px;color:#6366f1;cursor:pointer;text-decoration:underline;margin-top:10px;" id="btnVoltarCamera">↩ Tentar câmera novamente</div>
+  </div>
+
+  <div id="scannerContador"></div>
 </div>
 
-<!-- AVISO DE VENCIMENTO (banner) -->
-<div id="aviso-banner"></div>
-
-<!-- TELA: CADASTRO -->
-<div id="screen-cadastro" class="screen">
-  <div class="cadastro-card">
-    <div class="cadastro-logo">
-      <div class="cadastro-logo-icon">⚡</div>
-      <div>
-        <div class="cadastro-logo-text">Meter Control</div>
-        <div class="cadastro-logo-sub">Gestão de Medidores · Grupo Setup</div>
-      </div>
-    </div>
-    <h2>Bem-vindo! 👋</h2>
-    <p>Informe seus dados para começar. Você só precisará fazer isso uma vez neste dispositivo.</p>
-    <div class="field-group">
-      <div class="field">
-        <label>Seu nome completo</label>
-        <input type="text" id="cad-nome" placeholder="Ex: João Silva" autocomplete="name" />
-      </div>
-      <div class="field">
-        <label>WhatsApp (com DDD)</label>
-        <input type="tel" id="cad-whats" placeholder="Ex: 51999999999" autocomplete="tel" inputmode="tel" />
-      </div>
-    </div>
-    <button class="btn-primary" id="btn-cadastrar">Começar →</button>
-    <p style="font-size:11px;color:var(--text-muted);margin-top:16px;text-align:center;">
-      Ao continuar você recebe 7 dias grátis de avaliação.
-    </p>
-  </div>
+<div class="topbar">
+  <div><h1>Controle de Medidores</h1><p>Estoque e movimentação</p></div>
+  <div class="badge"><span class="dot" id="statusDot"></span><span id="statusText">Online</span></div>
 </div>
 
-<!-- TELA: LICENÇA EXPIRADA / BLOQUEADA -->
-<div id="screen-licenca" class="screen">
-  <div class="licenca-card">
-    <div class="licenca-icon" id="lic-icon">🔒</div>
-    <div class="licenca-title" id="lic-title">Acesso bloqueado</div>
-    <div class="licenca-msg" id="lic-msg">
-      Seu período de avaliação encerrou. Para continuar usando o Meter Control, ative sua licença.
-    </div>
-    <div class="pix-box">
-      <div class="pix-label">PIX — Chave CPF</div>
-      <div class="pix-key">62676393049</div>
-      <div class="pix-desc">R$97 ativação · R$47 semestral</div>
-    </div>
-    <a id="btn-whats-licenca" class="btn-whatsapp" href="#" target="_blank">
-      📲 Ativar via WhatsApp
-    </a>
-    <button class="btn-secondary" id="btn-verificar-lic">🔄 Já paguei — verificar</button>
-  </div>
-</div>
-
-<!-- APP PRINCIPAL -->
-<div id="screen-app" class="screen">
-
-  <!-- Header -->
-  <div class="header">
-    <div class="header-top">
-      <div class="header-logo">
-        <div class="header-logo-icon">⚡</div>
-        <div class="header-logo-name">Meter Control</div>
-      </div>
-      <span class="header-badge badge-ativa" id="licenca-badge">Ativa</span>
-    </div>
-    <div class="header-user" id="header-user-name">Técnico</div>
+<div class="container">
+  <div id="pendingBanner" class="banner">
+    <span id="pendingText"></span>
+    <button id="btnSincronizar">sincronizar</button>
   </div>
 
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab active" onclick="showTab('registrar')" id="tab-registrar">
-      <span class="tab-icon">📷</span> Registrar
-    </button>
-    <button class="tab" onclick="showTab('historico')" id="tab-historico">
-      <span class="tab-icon">📋</span> Histórico
-    </button>
+  <div class="card">
+    <div class="row">
+      <span style="font-size:13px;font-weight:600;color:#e5e7eb;">Scanner de Código / QR</span>
+      <div class="toggle-wrap">
+        <span class="toggle-label">Modo Lote</span>
+        <button class="toggle" id="toggleLote" role="switch" aria-checked="false"><span class="toggle-dot"></span></button>
+      </div>
+    </div>
+    <button class="btn btn-indigo" id="btnAbrirScanner">📷 Abrir Câmera</button>
+    <div class="lote-aviso" id="loteAviso">Bipagem contínua ativa — cada leitura salva automaticamente</div>
   </div>
 
-  <!-- Panel: Registrar -->
-  <div class="panel active" id="panel-registrar">
-
-    <div style="margin-bottom:14px;">
-      <div class="scanner-wrap">
-        <video id="preview" playsinline muted autoplay></video>
-        <div class="scanner-overlay">
-          <div class="scanner-frame"></div>
-          <div class="scanner-line"></div>
-        </div>
-        <div class="scanner-status" id="cam-status">Iniciando câmera...</div>
-      </div>
-
-      <!-- Botão de captura grande -->
-      <button id="btn-capturar" onclick="capturarFrame()">
-        📷 Capturar código
-      </button>
-
-      <div class="scanner-controls">
-        <button class="btn-cam" id="btn-cam-toggle" onclick="toggleCamera()">⏸ Pausar</button>
-        <button class="btn-cam" id="btn-cam-switch" onclick="switchCamera()">🔄 Câmera</button>
-        <button class="btn-cam" id="btn-torch" onclick="toggleTorch()">🔦 Flash</button>
+  <div class="card">
+    <div class="campo">
+      <label>Número do Medidor / Série</label>
+      <input id="numeroMedidor" type="text" autocomplete="off" placeholder="Ex: 5893867-0" />
+      <div class="erro-campo" id="erroNumero">Mínimo de 4 caracteres.</div>
+    </div>
+    <div class="campo">
+      <label>Tipo de Movimentação</label>
+      <div class="tipo-grid">
+        <button type="button" class="tipo-btn" id="btnEntrada">📥 Entrada</button>
+        <button type="button" class="tipo-btn" id="btnSaida">📤 Saída</button>
       </div>
     </div>
-
-    <div id="resultado-container">
-      <div class="resultado-header">Número do medidor</div>
-      <div class="resultado-body">
-        <input type="text" id="campo-medidor" placeholder="Leia o código ou digite..." inputmode="numeric"
-          oninput="onMedidorInput(this.value)" />
-        <div class="campo-hint" id="campo-hint">Aponte a câmera para o código de barras do medidor.</div>
-      </div>
+    <div class="campo">
+      <label>Responsável Técnico</label>
+      <input id="responsavel" type="text" autocomplete="off" placeholder="Nome do responsável" />
     </div>
-
-    <div class="tipo-toggle">
-      <button class="tipo-btn entrada" id="tipo-entrada" onclick="selectTipo('Entrada')">
-        <span class="tipo-icon">📥</span>
-        Entrada
-      </button>
-      <button class="tipo-btn saida" id="tipo-saida" onclick="selectTipo('Saída')">
-        <span class="tipo-icon">📤</span>
-        Saída
-      </button>
+    <div class="campo">
+      <label>Observação / Destino</label>
+      <input id="observacao" type="text" autocomplete="off" placeholder="Ex: Meu estoque, Cliente X, Manutenção" />
     </div>
-
-    <div class="obs-wrap">
-      <label class="obs-label">Observação (opcional)</label>
-      <textarea id="campo-obs" placeholder="Ex: medidor danificado, local de instalação..."></textarea>
+    <div class="gps-row">
+      <span class="gps-dot" id="gpsDot"></span>
+      <span id="gpsTexto">Localizando GPS...</span>
     </div>
-
-    <button id="btn-registrar" onclick="registrar()" disabled>
-      ✓ Registrar
+    <button class="btn btn-green" id="btnSalvar">
+      <span id="btnSalvarLabel">Confirmar Movimentação</span>
     </button>
   </div>
-
-  <!-- Panel: Histórico -->
-  <div class="panel" id="panel-historico">
-    <div class="historico-stats">
-      <div class="stat-card">
-        <div class="stat-val green" id="stat-entradas">0</div>
-        <div class="stat-lbl">Entradas</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-val red" id="stat-saidas">0</div>
-        <div class="stat-lbl">Saídas</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-val blue" id="stat-saldo">0</div>
-        <div class="stat-lbl">Saldo</div>
-      </div>
-    </div>
-
-    <div class="hist-controls">
-      <select class="hist-filter" id="filtro-tipo" onchange="renderHistorico()">
-        <option value="">Todos</option>
-        <option value="Entrada">Entradas</option>
-        <option value="Saída">Saídas</option>
-      </select>
-      <button class="btn-print" style="flex:1;margin:0;" onclick="imprimirRelatorio()">🖨 Imprimir</button>
-      <button class="btn-clear-hist" onclick="limparHistorico()">🗑</button>
-    </div>
-
-    <div class="historico-list" id="historico-list"></div>
-  </div>
-
 </div>
 
-<!-- TOAST -->
 <div id="toast"></div>
 
 <script>
-// ══════════════════════════════════════════
-//  CONFIGURAÇÕES
-// ══════════════════════════════════════════
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2Hj0Jd79t-45kvDIMZGv1k9C3bCt7Bx3mRN2xtydIpKGeKF3irNPQPPyYginPIG50sg/exec';
-const PIX_KEY = '62676393049';
-const WHATSAPP_NUM = '5551996554505';
+(function () {
+  "use strict";
+  var APPS_URL = "https://script.google.com/macros/s/AKfycby2Hj0Jd79t-45kvDIMZGv1k9C3bCt7Bx3mRN2xtydIpKGeKF3irNPQPPyYginPIG50sg/exec";
+  var FILA_KEY = "filaOfflineMedidores";
+  var DEBOUNCE = 4000;
+  var estado = { online: navigator.onLine, modoLote: false, tipo: null, lat: null, lng: null, precisao: null, sincronizando: false, qr: null, ultimosCodigos: {} };
+  var totalLidos = 0;
+  function $(id) { return document.getElementById(id); }
 
-// ══════════════════════════════════════════
-//  STATE
-// ══════════════════════════════════════════
-let currentTipo = null;
-let cameraActive = false;
-let currentStream = null;
-let codeReader = null;
-let useFrontCamera = false;
-let torchOn = false;
-let torchTrack = null;
-let tecnico = null; // { nome, whatsapp }
-
-// ══════════════════════════════════════════
-//  INIT
-// ══════════════════════════════════════════
-window.addEventListener('load', async () => {
-  const savedTecnico = getSavedTecnico();
-
-  if (!savedTecnico) {
-    hideSplash();
-    showScreen('screen-cadastro');
-    return;
+  function toast(msg, tipo) {
+    var cores = { sucesso:"#059669", erro:"#dc2626", aviso:"#d97706", info:"#4f46e5" };
+    var el = $("toast"); el.textContent = msg; el.style.background = cores[tipo]||cores.info;
+    el.classList.add("show"); clearTimeout(el._t);
+    el._t = setTimeout(function(){ el.classList.remove("show"); }, 3000);
   }
 
-  tecnico = savedTecnico;
-
-  // verifica licença
-  await verificarLicenca(true);
-});
-
-function hideSplash() {
-  const s = document.getElementById('splash');
-  s.classList.add('hidden');
-  setTimeout(() => s.remove(), 400);
-}
-
-// ══════════════════════════════════════════
-//  TECNICO / CADASTRO
-// ══════════════════════════════════════════
-function getSavedTecnico() {
-  const d = localStorage.getItem('mc_tecnico');
-  if (!d) return null;
-  try { return JSON.parse(d); } catch { return null; }
-}
-
-function saveTecnico(nome, whatsapp) {
-  const obj = { nome, whatsapp };
-  localStorage.setItem('mc_tecnico', JSON.stringify(obj));
-  return obj;
-}
-
-document.getElementById('btn-cadastrar').addEventListener('click', async () => {
-  const nome = document.getElementById('cad-nome').value.trim();
-  const whats = document.getElementById('cad-whats').value.replace(/\D/g, '');
-  if (!nome) { toast('Informe seu nome.', 'error'); return; }
-  if (whats.length < 10) { toast('WhatsApp inválido.', 'error'); return; }
-
-  const btn = document.getElementById('btn-cadastrar');
-  btn.disabled = true;
-  btn.textContent = 'Verificando...';
-
-  tecnico = saveTecnico(nome, whats);
-  await verificarLicenca(true);
-});
-
-// ══════════════════════════════════════════
-//  LICENÇA
-// ══════════════════════════════════════════
-async function verificarLicenca(isInit = false) {
-  // Sempre verifica online — cache só usado se sem internet
-  // Limpa cache antigo que possa ter TRIAL/ATIVA salvo incorretamente
-  localStorage.removeItem('mc_licenca_cache');
-  let status = null;
-  let online = false;
-
-  try {
-    status = await jsonpRequest(
-      `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`,
-      8000
-    );
-    online = true;
-    // Se bloqueada/expirada, apaga cache para não sobrar resultado antigo
-    if (status.situacao === 'BLOQUEADA' || status.situacao === 'EXPIRADA') {
-      localStorage.removeItem('mc_licenca_cache');
-    } else {
-      localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...status, cachedAt: Date.now() }));
-    }
-  } catch (e) {
-    console.warn('Sem internet — usando cache:', e.message);
-    // Offline: usa cache de até 3 dias
-    const cached = localStorage.getItem('mc_licenca_cache');
-    if (cached) {
-      try {
-        const c = JSON.parse(cached);
-        const ageDias = (Date.now() - (c.cachedAt || 0)) / 86400000;
-        if (ageDias < 3) {
-          status = c;
-          console.log('Cache offline válido:', ageDias.toFixed(1), 'dias');
-        } else {
-          console.warn('Cache expirado — bloqueando por segurança');
-          // Cache velho demais sem internet → bloqueia
-          status = { situacao: 'BLOQUEADA', mensagem: 'Sem conexão há mais de 3 dias. Conecte-se para verificar sua licença.' };
-        }
-      } catch {}
-    }
+  function lerFila() { try { return JSON.parse(localStorage.getItem(FILA_KEY)||"[]"); } catch(e){ return []; } }
+  function salvarFila(f) { try { localStorage.setItem(FILA_KEY,JSON.stringify(f)); } catch(e){} }
+  function enfileirar(r) { var f=lerFila(); f.push(r); salvarFila(f); atualizarBanner(); }
+  function removerFila(id) { salvarFila(lerFila().filter(function(r){ return r.idCliente!==id; })); atualizarBanner(); }
+  function atualizarBanner() {
+    var f=lerFila();
+    if (f.length) { $("pendingBanner").classList.add("vis"); $("pendingText").textContent=f.length+(f.length===1?" registro pendente":" registros pendentes"); }
+    else { $("pendingBanner").classList.remove("vis"); }
   }
 
-  hideSplash();
-
-  if (!status) {
-    // sem conexão e sem cache → entrada restrita mas não bloqueia (modo offline gracioso)
-    mostrarApp('trial', null);
-    return;
+  function salvarRegistro(reg, onOk, onErr) {
+    var p=new URLSearchParams();
+    p.append("numero",reg.numero); p.append("tipo",reg.tipo); p.append("responsavel",reg.responsavel);
+    p.append("observacao",reg.observacao||""); p.append("lat",reg.lat||""); p.append("lng",reg.lng||"");
+    p.append("precisao",reg.precisao||""); p.append("idCliente",reg.idCliente);
+    var cb="cb_"+Date.now(), sc=document.createElement("script"), done=false;
+    window[cb]=function(r){ done=true; delete window[cb]; document.body.removeChild(sc); (r&&r.status==="sucesso"?onOk:onErr)(r); };
+    sc.onerror=function(){ if(done){return;} done=true; delete window[cb]; try{document.body.removeChild(sc);}catch(e){} onErr({mensagem:"Erro de rede"}); };
+    setTimeout(function(){ if(done){return;} done=true; delete window[cb]; try{document.body.removeChild(sc);}catch(e){} onErr({mensagem:"Timeout"}); },15000);
+    sc.src=APPS_URL+"?"+p.toString()+"&callback="+cb;
+    document.body.appendChild(sc);
   }
 
-  switch (status.situacao) {
-    case 'ATIVA':
-      mostrarApp('ativa', status.diasRestantes);
-      break;
-    case 'TRIAL':
-      mostrarApp('trial', status.diasRestantes);
-      break;
-    case 'AVISO':
-      mostrarApp('aviso', status.diasRestantes);
-      break;
-    case 'EXPIRADA':
-    case 'BLOQUEADA':
-    default:
-      mostrarBloqueio(status.situacao, status.mensagem);
-      break;
-  }
-}
-
-function mostrarApp(situacao, diasRestantes) {
-  showScreen('screen-app');
-  document.getElementById('header-user-name').textContent = tecnico ? tecnico.nome : 'Técnico';
-
-  const badge = document.getElementById('licenca-badge');
-  const banner = document.getElementById('aviso-banner');
-
-  if (situacao === 'trial') {
-    badge.textContent = `Trial · ${diasRestantes ?? '?'}d`;
-    badge.className = 'header-badge badge-trial';
-    if (diasRestantes <= 3) {
-      banner.innerHTML = `⏳ Seu trial encerra em <strong>${diasRestantes} dia(s)</strong>. <a href="${getWhatsappLink('trial')}" target="_blank">Ative sua licença →</a>`;
-      banner.classList.add('show');
-    }
-  } else if (situacao === 'aviso') {
-    badge.textContent = `Vence em ${diasRestantes}d`;
-    badge.className = 'header-badge badge-aviso';
-    banner.innerHTML = `⚠️ Sua licença vence em <strong>${diasRestantes} dia(s)</strong>. <a href="${getWhatsappLink('renovar')}" target="_blank">Renovar agora →</a>`;
-    banner.classList.add('show');
-  } else {
-    badge.textContent = 'Ativa';
-    badge.className = 'header-badge badge-ativa';
+  function sincronizar() {
+    if (estado.sincronizando){return;} var f=lerFila(); if(!f.length){return;}
+    estado.sincronizando=true;
+    (function next(i){ if(i>=f.length){estado.sincronizando=false;atualizarBanner();return;}
+      salvarRegistro(f[i],function(){removerFila(f[i].idCliente);next(i+1);},function(){estado.sincronizando=false;});
+    })(0);
   }
 
-  initApp();
-}
-
-function mostrarBloqueio(situacao, mensagem) {
-  showScreen('screen-licenca');
-  const icon = document.getElementById('lic-icon');
-  const title = document.getElementById('lic-title');
-  const msg = document.getElementById('lic-msg');
-
-  if (situacao === 'EXPIRADA') {
-    icon.textContent = '⌛';
-    title.textContent = 'Período encerrado';
-    msg.textContent = mensagem || 'Seu trial de 7 dias encerrou. Ative sua licença para continuar.';
-  } else {
-    icon.textContent = '🔒';
-    title.textContent = 'Acesso bloqueado';
-    msg.textContent = mensagem || 'Acesso suspenso. Verifique sua licença.';
+  function atualizarConexao() {
+    estado.online=navigator.onLine;
+    $("statusDot").style.background=estado.online?"#34d399":"#fb923c";
+    $("statusText").textContent=estado.online?"Online":"Offline";
+    atualizarBanner(); if(estado.online){sincronizar();}
   }
+  window.addEventListener("online",atualizarConexao); window.addEventListener("offline",atualizarConexao);
+  $("btnSincronizar").addEventListener("click",function(){ if(!estado.online){toast("Sem conexão.","aviso");return;} toast("Sincronizando...","info"); sincronizar(); });
 
-  const whatsLink = getWhatsappLink(situacao === 'EXPIRADA' ? 'ativar' : 'suporte');
-  document.getElementById('btn-whats-licenca').href = whatsLink;
-}
-
-document.getElementById('btn-verificar-lic').addEventListener('click', async () => {
-  const btn = document.getElementById('btn-verificar-lic');
-  btn.textContent = '⏳ Verificando...';
-  btn.disabled = true;
-  await verificarLicenca(false);
-  btn.textContent = '🔄 Já paguei — verificar';
-  btn.disabled = false;
-});
-
-function getWhatsappLink(motivo) {
-  const msgs = {
-    trial: `Olá! Quero ativar minha licença do Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
-    ativar: `Olá! Quero ativar o Meter Control. Já realizei o PIX. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
-    renovar: `Olá! Quero renovar minha licença do Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
-    suporte: `Olá! Preciso de suporte no Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
-  };
-  const txt = encodeURIComponent(msgs[motivo] || msgs.suporte);
-  return `https://wa.me/${WHATSAPP_NUM}?text=${txt}`;
-}
-
-// ══════════════════════════════════════════
-//  APP PRINCIPAL
-// ══════════════════════════════════════════
-function initApp() {
-  renderHistorico();
-  initScanner();
-}
-
-// ══════════════════════════════════════════
-//  SCREENS / TABS
-// ══════════════════════════════════════════
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-}
-
-function showTab(tab) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('panel-' + tab).classList.add('active');
-  document.getElementById('tab-' + tab).classList.add('active');
-
-  if (tab === 'historico') {
-    renderHistorico();
-    stopCamera();
-  } else {
-    startCamera();
-  }
-}
-
-// ══════════════════════════════════════════
-//  SCANNER — captura de frame
-// ══════════════════════════════════════════
-
-let scanCanvas    = null;
-let scanCtx       = null;
-let zxingReader   = null;
-let scanLoop      = null;
-
-async function initScanner() {
-  scanCanvas = document.createElement('canvas');
-  scanCtx    = scanCanvas.getContext('2d', { willReadFrequently: true });
-
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.CODE_128,
-    ZXing.BarcodeFormat.CODE_39,
-    ZXing.BarcodeFormat.CODE_93,
-    ZXing.BarcodeFormat.ITF,
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.QR_CODE,
-    ZXing.BarcodeFormat.DATA_MATRIX,
-  ]);
-  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-  zxingReader = new ZXing.MultiFormatReader();
-  zxingReader.setHints(hints);
-
-  await startCamera();
-}
-
-async function startCamera() {
-  if (cameraActive) return;
-  setStatus('Iniciando câmera...');
-  try {
-    const constraints = {
-      video: {
-        facingMode: useFrontCamera ? 'user' : { ideal: 'environment' },
-        width:  { ideal: 1920 },
-        height: { ideal: 1080 },
-      }
-    };
-    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-    const video = document.getElementById('preview');
-    video.srcObject = currentStream;
-    await video.play();
-
-    torchTrack = currentStream.getVideoTracks()[0];
-    cameraActive = true;
-    document.getElementById('btn-cam-toggle').textContent = '⏸ Pausar';
-    setStatus('Aponte e pressione 📷 para ler');
-
-    // Loop automático: tenta ler a cada 400ms sem travar a UI
-    iniciarAutoScan(video);
-
-  } catch (e) {
-    setStatus('⚠️ Permita acesso à câmera ou use o campo manual.');
-    cameraActive = false;
-  }
-}
-
-function iniciarAutoScan(video) {
-  if (scanLoop) clearInterval(scanLoop);
-
-  scanLoop = setInterval(async () => {
-    if (!cameraActive || video.readyState < 2) return;
-
-    // Usa resolução REAL do vídeo — sem reduzir
-    const W = video.videoWidth  || 1280;
-    const H = video.videoHeight || 720;
-    scanCanvas.width  = W;
-    scanCanvas.height = H;
-    scanCtx.drawImage(video, 0, 0, W, H);
-
-    try {
-      const img     = scanCtx.getImageData(0, 0, W, H);
-      const lum     = new ZXing.RGBLuminanceSource(img.data, W, H);
-      const bitmap  = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      const result  = zxingReader.decode(bitmap);
-      if (result) {
-        const code = result.getText().trim();
-        onCodigoLido(code);
-      }
-    } catch (_) {}
-
-  }, 400); // tenta a cada 400ms
-}
-
-// Captura manual — botão 📷
-async function capturarFrame() {
-  const video = document.getElementById('preview');
-  if (!cameraActive || video.readyState < 2) {
-    toast('Câmera não está ativa.', 'error');
-    return;
-  }
-
-  setStatus('📷 Processando...');
-  const W = video.videoWidth  || 1280;
-  const H = video.videoHeight || 720;
-  scanCanvas.width  = W;
-  scanCanvas.height = H;
-  scanCtx.drawImage(video, 0, 0, W, H);
-
-  // Tenta 3 estratégias em sequência
-  const strategies = [
-    // 1. Imagem completa
-    () => {
-      const img    = scanCtx.getImageData(0, 0, W, H);
-      const lum    = new ZXing.RGBLuminanceSource(img.data, W, H);
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      return zxingReader.decode(bitmap);
-    },
-    // 2. Região central (onde o frame de mira fica)
-    () => {
-      const x = Math.floor(W * 0.1), y = Math.floor(H * 0.3);
-      const w = Math.floor(W * 0.8), h = Math.floor(H * 0.4);
-      const img    = scanCtx.getImageData(x, y, w, h);
-      const lum    = new ZXing.RGBLuminanceSource(img.data, w, h);
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      return zxingReader.decode(bitmap);
-    },
-    // 3. Faixa horizontal central (código de barras)
-    () => {
-      const x = 0, y = Math.floor(H * 0.35);
-      const w = W, h = Math.floor(H * 0.30);
-      const img    = scanCtx.getImageData(x, y, w, h);
-      const lum    = new ZXing.RGBLuminanceSource(img.data, w, h);
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      return zxingReader.decode(bitmap);
-    },
-  ];
-
-  for (const strategy of strategies) {
-    try {
-      const result = strategy();
-      if (result) {
-        onCodigoLido(result.getText().trim());
-        return;
-      }
-    } catch (_) {}
-  }
-
-  setStatus('❌ Não leu — tente mais perto ou use o campo manual.');
-  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-  setTimeout(() => setStatus('Aponte e pressione 📷 para ler'), 2000);
-}
-
-function stopCamera() {
-  if (scanLoop) { clearInterval(scanLoop); scanLoop = null; }
-  if (!cameraActive) return;
-  if (currentStream) {
-    currentStream.getTracks().forEach(t => t.stop());
-    currentStream = null;
-  }
-  document.getElementById('preview').srcObject = null;
-  torchTrack = null;
-  torchOn    = false;
-  cameraActive = false;
-  document.getElementById('btn-cam-toggle').textContent = '▶ Iniciar';
-  document.getElementById('btn-torch').classList.remove('active');
-  document.getElementById('btn-torch').textContent = '🔦 Flash';
-  setStatus('Câmera pausada.');
-}
-
-function toggleCamera() {
-  if (cameraActive) stopCamera(); else startCamera();
-}
-
-async function switchCamera() {
-  useFrontCamera = !useFrontCamera;
-  stopCamera();
-  await startCamera();
-}
-
-async function toggleTorch() {
-  torchOn = !torchOn;
-  const btn = document.getElementById('btn-torch');
-
-  // Estratégia 1: usar a track já ativa
-  if (torchTrack) {
-    try {
-      await torchTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
-      btn.classList.toggle('active', torchOn);
-      btn.textContent = torchOn ? '🔦 Flash ON' : '🔦 Flash';
-      return;
-    } catch (_) {}
-  }
-
-  // Estratégia 2: pedir nova stream com torch ligado direto nas constraints
-  if (torchOn) {
-    try {
-      const streamTorch = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          advanced: [{ torch: true }]
-        }
-      });
-      // Substitui a track de vídeo mantendo o stream ativo
-      const newTrack = streamTorch.getVideoTracks()[0];
-      if (currentStream) {
-        const oldTrack = currentStream.getVideoTracks()[0];
-        if (oldTrack) { oldTrack.stop(); currentStream.removeTrack(oldTrack); }
-        currentStream.addTrack(newTrack);
-      }
-      torchTrack = newTrack;
-      btn.classList.add('active');
-      btn.textContent = '🔦 Flash ON';
-      return;
-    } catch (_) {}
-  } else {
-    // Desligar: para track atual e reinicia câmera normal
-    try {
-      if (torchTrack) torchTrack.stop();
-      torchOn = false;
-      btn.classList.remove('active');
-      btn.textContent = '🔦 Flash';
-      stopCamera();
-      await startCamera();
-      return;
-    } catch (_) {}
-  }
-
-  // Sem suporte nenhum
-  torchOn = !torchOn; // reverte
-  toast('Flash não suportado neste dispositivo.', 'warn');
-}
-
-function setStatus(msg) {
-  document.getElementById('cam-status').textContent = msg;
-}
-
-function onCodigoLido(code) {
-  const campo = document.getElementById('campo-medidor');
-  if (campo.value === code) return;
-  campo.value = code;
-  campo.classList.add('success');
-  setStatus(`✓ Lido: ${code}`);
-  onMedidorInput(code);
-  toast('✓ Código lido: ' + code, 'success');
-  if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
-}
-
-// ══════════════════════════════════════════
-//  TIPO
-// ══════════════════════════════════════════
-function selectTipo(tipo) {
-  currentTipo = tipo;
-  document.getElementById('tipo-entrada').classList.toggle('selected', tipo === 'Entrada');
-  document.getElementById('tipo-saida').classList.toggle('selected', tipo === 'Saída');
-  updateBtnRegistrar();
-}
-
-// ══════════════════════════════════════════
-//  MEDIDOR INPUT
-// ══════════════════════════════════════════
-function onMedidorInput(val) {
-  const campo = document.getElementById('campo-medidor');
-  campo.classList.remove('success', 'error');
-  document.getElementById('campo-hint').textContent = val
-    ? 'Selecione o tipo de movimentação.'
-    : 'Aponte a câmera para o código de barras do medidor.';
-  updateBtnRegistrar();
-}
-
-function updateBtnRegistrar() {
-  const val = document.getElementById('campo-medidor').value.trim();
-  document.getElementById('btn-registrar').disabled = !(val && currentTipo);
-}
-
-// ══════════════════════════════════════════
-//  REGISTRAR
-// ══════════════════════════════════════════
-function registrar() {
-  const num = document.getElementById('campo-medidor').value.trim();
-  const obs = document.getElementById('campo-obs').value.trim();
-
-  if (!num) { toast('Informe o número do medidor.', 'error'); return; }
-  if (!currentTipo) { toast('Selecione Entrada ou Saída.', 'error'); return; }
-
-  const registros = getRegistros();
-
-  // Regra de negócio: não permitir mesmo medidor + mesmo tipo
-  const duplicado = registros.find(r => r.num === num && r.tipo === currentTipo);
-  if (duplicado) {
-    document.getElementById('campo-medidor').classList.add('error');
-    toast(`❌ Medidor já tem ${currentTipo} registrada!`, 'error');
-    return;
-  }
-
-  // Bloqueia botão enquanto captura GPS
-  const btnReg = document.getElementById('btn-registrar');
-  btnReg.disabled = true;
-  btnReg.innerHTML = '📍 Capturando GPS...';
-
-  const salvarComGPS = (gps) => {
-    const agora = new Date();
-    const novoRegistro = {
-      id: Date.now(),
-      num,
-      tipo: currentTipo,
-      obs,
-      gps,
-      data: agora.toLocaleDateString('pt-BR'),
-      hora: agora.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
-      tecnico: tecnico?.nome || 'Técnico'
-    };
-
-    registros.unshift(novoRegistro);
-    saveRegistros(registros);
-
-    toast(`✓ ${currentTipo} registrada: ${num}`, 'success');
-    if (navigator.vibrate) navigator.vibrate(100);
-
-    // Limpar formulário
-    document.getElementById('campo-medidor').value = '';
-    document.getElementById('campo-medidor').classList.remove('success', 'error');
-    document.getElementById('campo-obs').value = '';
-    document.getElementById('campo-hint').textContent = 'Aponte a câmera para o código de barras do medidor.';
-    currentTipo = null;
-    document.getElementById('tipo-entrada').classList.remove('selected');
-    document.getElementById('tipo-saida').classList.remove('selected');
-    btnReg.innerHTML = '✓ Registrar';
-    btnReg.disabled = true;
-    setStatus('Pronto para próxima bipagem.');
-  };
-
-  // Tenta capturar GPS (timeout 6s — se não conseguir, salva sem)
-  if (navigator.geolocation) {
-    const gpsTimeout = setTimeout(() => salvarComGPS('Sem GPS'), 6000);
+  function capturarGps() {
+    if(!navigator.geolocation){$("gpsTexto").textContent="GPS não suportado";return;}
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        clearTimeout(gpsTimeout);
-        const lat = pos.coords.latitude.toFixed(6);
-        const lng = pos.coords.longitude.toFixed(6);
-        salvarComGPS(lat + ',' + lng);
-      },
-      () => { clearTimeout(gpsTimeout); salvarComGPS('Sem GPS'); },
-      { timeout: 5000, maximumAge: 30000, enableHighAccuracy: true }
+      function(p){ estado.lat=p.coords.latitude.toFixed(6); estado.lng=p.coords.longitude.toFixed(6); estado.precisao=Math.round(p.coords.accuracy); $("gpsTexto").textContent="GPS capturado (±"+estado.precisao+"m)"; $("gpsDot").style.background="#34d399"; },
+      function(){ $("gpsTexto").textContent="GPS indisponível"; $("gpsDot").style.background="#f87171"; },
+      {enableHighAccuracy:true,timeout:12000,maximumAge:15000}
     );
-  } else {
-    salvarComGPS('Sem GPS');
-  }
-}
-
-// ══════════════════════════════════════════
-//  HISTÓRICO
-// ══════════════════════════════════════════
-function getRegistros() {
-  const d = localStorage.getItem('mc_registros');
-  if (!d) return [];
-  try { return JSON.parse(d); } catch { return []; }
-}
-
-function saveRegistros(arr) {
-  localStorage.setItem('mc_registros', JSON.stringify(arr));
-}
-
-function renderHistorico() {
-  const registros = getRegistros();
-  const filtro = document.getElementById('filtro-tipo')?.value || '';
-  const filtered = filtro ? registros.filter(r => r.tipo === filtro) : registros;
-
-  const entradas = registros.filter(r => r.tipo === 'Entrada').length;
-  const saidas = registros.filter(r => r.tipo === 'Saída').length;
-  document.getElementById('stat-entradas').textContent = entradas;
-  document.getElementById('stat-saidas').textContent = saidas;
-  document.getElementById('stat-saldo').textContent = entradas - saidas;
-
-  const list = document.getElementById('historico-list');
-  if (filtered.length === 0) {
-    list.innerHTML = '<div class="hist-empty">📭 Nenhum registro encontrado.</div>';
-    return;
   }
 
-  list.innerHTML = filtered.map(r => `
-    <div class="hist-item">
-      <div class="hist-tipo-badge ${r.tipo === 'Entrada' ? 'entrada' : 'saida'}">
-        ${r.tipo === 'Entrada' ? '📥' : '📤'}
-      </div>
-      <div class="hist-info">
-        <div class="hist-num">${r.num}</div>
-        <div class="hist-meta">${r.tipo} · ${r.data} ${r.hora} · ${r.tecnico}</div>
-        ${r.gps && r.gps !== 'Sem GPS' ? `<div class="hist-obs">📍 ${r.gps}</div>` : ''}
-        ${r.obs ? `<div class="hist-obs">${r.obs}</div>` : ''}
-      </div>
-    </div>
-  `).join('');
-}
+  function selecionarTipo(t) {
+    estado.tipo=t;
+    $("btnEntrada").className="tipo-btn"+(t==="Entrada"?" entrada":"");
+    $("btnSaida").className="tipo-btn"+(t==="Saída"?" saida":"");
+  }
+  $("btnEntrada").addEventListener("click",function(){selecionarTipo("Entrada");});
+  $("btnSaida").addEventListener("click",function(){selecionarTipo("Saída");});
 
-function limparHistorico() {
-  if (!confirm('Apagar todo o histórico deste dispositivo?')) return;
-  localStorage.removeItem('mc_registros');
-  renderHistorico();
-  toast('Histórico apagado.', 'warn');
-}
-
-function imprimirRelatorio() {
-  const registros = getRegistros();
-  const entradas = registros.filter(r => r.tipo === 'Entrada').length;
-  const saidas = registros.filter(r => r.tipo === 'Saída').length;
-  const agora = new Date().toLocaleString('pt-BR');
-
-  const linhas = registros.map(r => {
-    const gpsVal = r.gps && r.gps !== 'Sem GPS'
-      ? `<a href="https://maps.google.com/?q=${r.gps}" target="_blank">${r.gps}</a>`
-      : 'Sem GPS';
-    return `<tr><td>${r.num}</td><td>${r.tipo}</td><td>${r.data} ${r.hora}</td><td>${r.tecnico}</td><td>${gpsVal}</td><td>${r.obs || ''}</td></tr>`;
-  }).join('');
-
-  const html = `
-    <html><head><meta charset="UTF-8"><title>Relatório Meter Control</title>
-    <style>
-      body{font-family:Arial,sans-serif;font-size:12px;margin:20px;}
-      h1{font-size:18px;margin-bottom:4px;}
-      .sub{color:#666;margin-bottom:16px;font-size:11px;}
-      table{width:100%;border-collapse:collapse;}
-      th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;}
-      th{background:#f0f0f0;font-weight:600;}
-      .summary{margin-bottom:14px;display:flex;gap:20px;}
-      .stat{font-size:13px;}
-    </style></head>
-    <body>
-    <h1>⚡ Meter Control — Relatório</h1>
-    <div class="sub">Gerado em ${agora} · Técnico: ${tecnico?.nome || '-'}</div>
-    <div class="summary">
-      <span class="stat">📥 Entradas: <strong>${entradas}</strong></span>
-      <span class="stat">📤 Saídas: <strong>${saidas}</strong></span>
-      <span class="stat">📊 Saldo: <strong>${entradas - saidas}</strong></span>
-    </div>
-    <table>
-      <thead><tr><th>Medidor</th><th>Tipo</th><th>Data/Hora</th><th>Técnico</th><th>GPS</th><th>Obs</th></tr></thead>
-      <tbody>${linhas}</tbody>
-    </table>
-    </body></html>
-  `;
-
-  const w = window.open('', '_blank');
-  w.document.write(html);
-  w.document.close();
-  w.print();
-}
-
-// ══════════════════════════════════════════
-//  UTILS
-// ══════════════════════════════════════════
-// ── JSONP (contorna CORS do Apps Script) ──────────────────────
-function jsonpRequest(url, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const cbName = 'mc_cb_' + Date.now();
-    const script = document.createElement('script');
-    let done = false;
-
-    const cleanup = () => {
-      done = true;
-      delete window[cbName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-    };
-
-    window[cbName] = (data) => {
-      cleanup();
-      resolve(data);
-    };
-
-    const timer = setTimeout(() => {
-      if (!done) {
-        cleanup();
-        reject(new Error('Timeout'));
-      }
-    }, timeoutMs || 8000);
-
-    script.onerror = () => {
-      clearTimeout(timer);
-      cleanup();
-      reject(new Error('Erro de rede'));
-    };
-
-    script.src = url + '&callback=' + cbName;
-    document.head.appendChild(script);
+  $("toggleLote").addEventListener("click",function(){
+    estado.modoLote=!estado.modoLote;
+    $("toggleLote").classList.toggle("on",estado.modoLote);
+    $("loteAviso").classList.toggle("vis",estado.modoLote);
+    toast("Modo Lote "+(estado.modoLote?"ativado":"desativado"),"info");
   });
-}
 
-function toast(msg, type = '') {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'show ' + type;
-  clearTimeout(window._toastTimeout);
-  window._toastTimeout = setTimeout(() => { t.className = ''; }, 2800);
-}
+  function beep() { try{ var ctx=new(window.AudioContext||window.webkitAudioContext)(),osc=ctx.createOscillator(),g=ctx.createGain(); osc.type="sine";osc.frequency.value=1500;g.gain.setValueAtTime(0.2,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.18);osc.connect(g);g.connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+0.18); }catch(e){} }
 
-async function fetchWithTimeout(url, ms) {
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(), ms);
-  try {
-    const r = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(id);
-    return r;
-  } catch (e) {
-    clearTimeout(id);
-    throw e;
+  // Validação: aceita letras, números e hífen, mínimo 4 chars
+  function validar(c){ return typeof c==="string" && c.trim().length>=4 && /^[A-Za-z0-9\-]+$/.test(c.trim()); }
+  function recente(c){ var agora=Date.now(),u=estado.ultimosCodigos[c]; estado.ultimosCodigos[c]=agora; return u&&(agora-u)<DEBOUNCE; }
+
+  function aoLer(texto) {
+    if(!validar(texto)){return;}
+    // Normaliza: remove espaços, mantém hífen
+    var cod=texto.trim().toUpperCase();
+    if(recente(cod)){toast("Já lido: "+cod+" (ignorado)","aviso");return;}
+    beep(); if(navigator.vibrate){navigator.vibrate(180);}
+    totalLidos++; $("scannerContador").textContent=totalLidos+(totalLidos===1?" leitura":" leituras")+" nesta sessão";
+    $("numeroMedidor").value=cod; toast("✓ Lido: "+cod,"info");
+    if(estado.modoLote){submeter();}else{fecharScanner();}
   }
-}
+
+  function mostrarReader(s){$("reader").style.display=s?"block":"none"; $("guiaLinha").style.display=s?"block":"none";}
+  function telaErro(){mostrarReader(false);$("telaErro").style.display="block";$("telaManual").style.display="none";$("scannerStatusBar").textContent="Câmera indisponível";}
+  function telaManual(){mostrarReader(false);$("telaErro").style.display="none";$("telaManual").style.display="block";$("scannerStatusBar").textContent="Digitação manual";setTimeout(function(){$("inputManual").focus();},100);}
+  function telaCamera(){$("telaErro").style.display="none";$("telaManual").style.display="none";mostrarReader(true);iniciarCamera();}
+
+  function pararCamera(){if(estado.qr){estado.qr.stop().catch(function(){});estado.qr=null;}}
+
+  function iniciarCamera(){
+    pararCamera();
+    $("scannerStatusBar").textContent="Iniciando câmera...";
+    $("dicaScan").textContent="";
+    estado.qr=new Html5Qrcode("reader");
+
+    // Configuração otimizada para códigos de barra estreitos de medidores
+    var config = {
+      fps: 20,                          // Mais frames por segundo = leitura mais rápida
+      qrbox: { width: 320, height: 120 }, // Área mais larga e baixa para código de barras
+      aspectRatio: 1.7,                 // Formato paisagem favorece código de barras
+      formatsToSupport: [               // Apenas formatos relevantes para medidores
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.QR_CODE
+      ]
+    };
+
+    estado.qr.start(
+      { facingMode:"environment" },
+      config,
+      aoLer,
+      function(){}
+    ).then(function(){
+      $("scannerStatusBar").textContent="Aponte para o código de barras";
+      $("dicaScan").textContent="📏 Mantenha o código dentro da área vermelha — aprox. 15cm de distância";
+    }).catch(function(err){
+      console.warn("Câmera:",err);
+      telaErro();
+    });
+  }
+
+  function abrirScanner(){
+    $("scannerModal").classList.add("aberto");
+    $("telaErro").style.display="none";
+    $("telaManual").style.display="none";
+    mostrarReader(true);
+    iniciarCamera();
+  }
+  function fecharScanner(){pararCamera();$("scannerModal").classList.remove("aberto");}
+
+  $("btnAbrirScanner").addEventListener("click",abrirScanner);
+  $("btnFecharScanner").addEventListener("click",fecharScanner);
+  $("btnTentarCamera").addEventListener("click",telaCamera);
+  $("btnIrManual").addEventListener("click",telaManual);
+  $("btnVoltarCamera").addEventListener("click",telaCamera);
+  $("btnConfirmarManual").addEventListener("click",function(){
+    var v=$("inputManual").value.trim().toUpperCase();
+    if(!validar(v)){toast("Código inválido (mín. 4 caracteres)","erro");return;}
+    aoLer(v); $("inputManual").value="";
+  });
+  $("inputManual").addEventListener("keydown",function(e){if(e.key==="Enter"){$("btnConfirmarManual").click();}});
+
+  function gerarId(){return "cli-"+Date.now()+"-"+Math.floor(Math.random()*99999);}
+  function setCarregando(v){$("btnSalvar").disabled=v;$("btnSalvarLabel").innerHTML=v?'<span class="spinner"></span> Salvando...':"Confirmar Movimentação";}
+  function limpar(){$("numeroMedidor").value="";if(!estado.modoLote){$("responsavel").value="";$("observacao").value="";selecionarTipo(null);}}
+
+  function submeter(){
+    var numero=$("numeroMedidor").value.trim(),resp=$("responsavel").value.trim(),obs=$("observacao").value.trim(),ok=true;
+    if(!validar(numero)){$("erroNumero").classList.add("vis");ok=false;}else{$("erroNumero").classList.remove("vis");}
+    if(!estado.tipo){toast("Selecione Entrada ou Saída.","aviso");ok=false;}
+    if(resp.length<2){toast("Informe o responsável técnico.","aviso");ok=false;}
+    if(!ok){return;}
+    var reg={idCliente:gerarId(),numero:numero,tipo:estado.tipo,responsavel:resp,observacao:obs,lat:estado.lat,lng:estado.lng,precisao:estado.precisao};
+    setCarregando(true);
+    if(!navigator.onLine){enfileirar(reg);setCarregando(false);toast("Sem internet: salvo na fila offline.","aviso");limpar();return;}
+    salvarRegistro(reg,
+      function(r){setCarregando(false);toast("✓ Registrado: "+r.id,"sucesso");limpar();},
+      function(){setCarregando(false);enfileirar(reg);toast("Falha: salvo na fila offline.","aviso");limpar();}
+    );
+  }
+
+  $("btnSalvar").addEventListener("click",submeter);
+  atualizarConexao(); atualizarBanner(); capturarGps();
+})();
 </script>
 </body>
 </html>
