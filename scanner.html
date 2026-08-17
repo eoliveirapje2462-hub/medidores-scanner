@@ -912,18 +912,14 @@ function showTab(tab) {
 }
 
 // ══════════════════════════════════════════
-//  SCANNER — alta precisão
+//  SCANNER
 // ══════════════════════════════════════════
 
-// Debounce: exige o mesmo código N vezes seguidas antes de aceitar
-const CONFIRMACOES_NECESSARIAS = 2;
 let ultimoCodigoVisto = '';
-let contagemConfirmacao = 0;
-let focusInterval = null;
+let ultimaLeitura = 0;
 
 async function initScanner() {
   try {
-    // Hints para priorizar formatos de medidores de energia
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
       ZXing.BarcodeFormat.CODE_128,
@@ -936,11 +932,8 @@ async function initScanner() {
       ZXing.BarcodeFormat.DATA_MATRIX,
     ]);
     hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
-    codeReader = new ZXing.BrowserMultiFormatReader(hints, {
-      delayBetweenScanAttempts: 50,   // tenta a cada 50ms — máxima velocidade
-      delayBetweenScanSuccess: 300,   // 300ms após leitura, evita duplicatas mas não trava
-    });
+    // timeBetweenScansMillis: padrão do ZXing — deixa ele gerenciar
+    codeReader = new ZXing.BrowserMultiFormatReader(hints);
     await startCamera();
   } catch (e) {
     setStatus('Câmera não disponível — use o campo manual.');
@@ -951,14 +944,12 @@ async function startCamera() {
   if (cameraActive) return;
   setStatus('Iniciando câmera...');
   try {
+    // Resolução balanceada: boa qualidade sem sobrecarregar o processamento
     const constraints = {
       video: {
         facingMode: useFrontCamera ? 'user' : { ideal: 'environment' },
-        width:  { ideal: 1920, min: 1280 },
-        height: { ideal: 1080, min: 720 },
-        focusMode: { ideal: 'continuous' },
-        exposureMode: { ideal: 'continuous' },
-        whiteBalanceMode: { ideal: 'continuous' },
+        width:  { min: 640, ideal: 1280, max: 1920 },
+        height: { min: 480, ideal: 720,  max: 1080 },
       }
     };
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -966,31 +957,24 @@ async function startCamera() {
     video.srcObject = currentStream;
     await video.play();
 
-    // Verificar suporte a torch e aplicar configurações avançadas
-    const track = currentStream.getVideoTracks()[0];
-    torchTrack = track;
-    const caps = track.getCapabilities?.() || {};
-    // torch: botão sempre clicável, tentamos acender de qualquer forma
-
-    // Foco contínuo — refoca a cada 3s para manter nitidez
-    clearInterval(focusInterval);
-    focusInterval = setInterval(async () => {
-      if (!cameraActive || !torchTrack) return;
-      try {
-        await torchTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-      } catch (_) {}
-    }, 3000);
+    // Salva track para flash
+    torchTrack = currentStream.getVideoTracks()[0];
 
     cameraActive = true;
     ultimoCodigoVisto = '';
-    contagemConfirmacao = 0;
+    ultimaLeitura = 0;
     document.getElementById('btn-cam-toggle').textContent = '⏸ Pausar';
     setStatus('Aponte para o código de barras');
 
     codeReader?.decodeFromStream(currentStream, video, (result, err) => {
       if (result) {
         const code = result.getText().trim();
-        processarLeitura(code);
+        const agora = Date.now();
+        // Ignora se for o mesmo código nos últimos 2s
+        if (code === ultimoCodigoVisto && agora - ultimaLeitura < 2000) return;
+        ultimoCodigoVisto = code;
+        ultimaLeitura = agora;
+        onCodigoLido(code);
       }
     });
 
@@ -1000,38 +984,22 @@ async function startCamera() {
   }
 }
 
-// Debounce: confirma o código N vezes antes de aceitar
-function processarLeitura(code) {
-  if (code === ultimoCodigoVisto) {
-    contagemConfirmacao++;
-  } else {
-    ultimoCodigoVisto = code;
-    contagemConfirmacao = 1;
-    // Feedback visual leve na 1ª leitura
-    setStatus(`🔍 Confirmando: ${code}`);
-  }
-
-  if (contagemConfirmacao >= CONFIRMACOES_NECESSARIAS) {
-    contagemConfirmacao = 0;
-    ultimoCodigoVisto = '';
-    onCodigoLido(code);
-  }
-}
-
 function stopCamera() {
   if (!cameraActive) return;
-  clearInterval(focusInterval);
   codeReader?.reset?.();
   if (currentStream) {
     currentStream.getTracks().forEach(t => t.stop());
     currentStream = null;
   }
   document.getElementById('preview').srcObject = null;
+  torchTrack = null;
+  torchOn = false;
   cameraActive = false;
   ultimoCodigoVisto = '';
-  contagemConfirmacao = 0;
-  setStatus('Câmera pausada.');
   document.getElementById('btn-cam-toggle').textContent = '▶ Iniciar';
+  document.getElementById('btn-torch').classList.remove('active');
+  document.getElementById('btn-torch').textContent = '🔦 Flash';
+  setStatus('Câmera pausada.');
 }
 
 function toggleCamera() {
