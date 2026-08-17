@@ -760,16 +760,17 @@ document.getElementById('btn-cadastrar').addEventListener('click', async () => {
 //  LICENÇA
 // ══════════════════════════════════════════
 async function verificarLicenca(isInit = false) {
-  // Tenta verificar online; fallback para cache local
+  // Tenta verificar online via JSONP (contorna CORS do Apps Script)
   let status = null;
   try {
-    const url = `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`;
-    const res = await fetchWithTimeout(url, 8000);
-    const data = await res.json();
-    status = data;
+    status = await jsonpRequest(
+      `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`,
+      8000
+    );
     // salva cache
-    localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...data, cachedAt: Date.now() }));
+    localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...status, cachedAt: Date.now() }));
   } catch (e) {
+    console.warn('Falha na verificação online:', e.message);
     // tenta cache
     const cached = localStorage.getItem('mc_licenca_cache');
     if (cached) {
@@ -1056,34 +1057,59 @@ function registrar() {
     return;
   }
 
-  const agora = new Date();
-  const novoRegistro = {
-    id: Date.now(),
-    num,
-    tipo: currentTipo,
-    obs,
-    data: agora.toLocaleDateString('pt-BR'),
-    hora: agora.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
-    tecnico: tecnico?.nome || 'Técnico'
+  // Bloqueia botão enquanto captura GPS
+  const btnReg = document.getElementById('btn-registrar');
+  btnReg.disabled = true;
+  btnReg.innerHTML = '📍 Capturando GPS...';
+
+  const salvarComGPS = (gps) => {
+    const agora = new Date();
+    const novoRegistro = {
+      id: Date.now(),
+      num,
+      tipo: currentTipo,
+      obs,
+      gps,
+      data: agora.toLocaleDateString('pt-BR'),
+      hora: agora.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
+      tecnico: tecnico?.nome || 'Técnico'
+    };
+
+    registros.unshift(novoRegistro);
+    saveRegistros(registros);
+
+    toast(`✓ ${currentTipo} registrada: ${num}`, 'success');
+    if (navigator.vibrate) navigator.vibrate(100);
+
+    // Limpar formulário
+    document.getElementById('campo-medidor').value = '';
+    document.getElementById('campo-medidor').classList.remove('success', 'error');
+    document.getElementById('campo-obs').value = '';
+    document.getElementById('campo-hint').textContent = 'Aponte a câmera para o código de barras do medidor.';
+    currentTipo = null;
+    document.getElementById('tipo-entrada').classList.remove('selected');
+    document.getElementById('tipo-saida').classList.remove('selected');
+    btnReg.innerHTML = '✓ Registrar';
+    btnReg.disabled = true;
+    setStatus('Pronto para próxima bipagem.');
   };
 
-  registros.unshift(novoRegistro);
-  saveRegistros(registros);
-
-  // Feedback
-  toast(`✓ ${currentTipo} registrada: ${num}`, 'success');
-  if (navigator.vibrate) navigator.vibrate(100);
-
-  // Limpar formulário
-  document.getElementById('campo-medidor').value = '';
-  document.getElementById('campo-medidor').classList.remove('success', 'error');
-  document.getElementById('campo-obs').value = '';
-  document.getElementById('campo-hint').textContent = 'Aponte a câmera para o código de barras do medidor.';
-  currentTipo = null;
-  document.getElementById('tipo-entrada').classList.remove('selected');
-  document.getElementById('tipo-saida').classList.remove('selected');
-  document.getElementById('btn-registrar').disabled = true;
-  setStatus('Pronto para próxima bipagem.');
+  // Tenta capturar GPS (timeout 6s — se não conseguir, salva sem)
+  if (navigator.geolocation) {
+    const gpsTimeout = setTimeout(() => salvarComGPS('Sem GPS'), 6000);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(gpsTimeout);
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+        salvarComGPS(lat + ',' + lng);
+      },
+      () => { clearTimeout(gpsTimeout); salvarComGPS('Sem GPS'); },
+      { timeout: 5000, maximumAge: 30000, enableHighAccuracy: true }
+    );
+  } else {
+    salvarComGPS('Sem GPS');
+  }
 }
 
 // ══════════════════════════════════════════
@@ -1124,6 +1150,7 @@ function renderHistorico() {
       <div class="hist-info">
         <div class="hist-num">${r.num}</div>
         <div class="hist-meta">${r.tipo} · ${r.data} ${r.hora} · ${r.tecnico}</div>
+        ${r.gps && r.gps !== 'Sem GPS' ? `<div class="hist-obs">📍 ${r.gps}</div>` : ''}
         ${r.obs ? `<div class="hist-obs">${r.obs}</div>` : ''}
       </div>
     </div>
@@ -1143,9 +1170,12 @@ function imprimirRelatorio() {
   const saidas = registros.filter(r => r.tipo === 'Saída').length;
   const agora = new Date().toLocaleString('pt-BR');
 
-  const linhas = registros.map(r =>
-    `<tr><td>${r.num}</td><td>${r.tipo}</td><td>${r.data} ${r.hora}</td><td>${r.tecnico}</td><td>${r.obs || ''}</td></tr>`
-  ).join('');
+  const linhas = registros.map(r => {
+    const gpsVal = r.gps && r.gps !== 'Sem GPS'
+      ? `<a href="https://maps.google.com/?q=${r.gps}" target="_blank">${r.gps}</a>`
+      : 'Sem GPS';
+    return `<tr><td>${r.num}</td><td>${r.tipo}</td><td>${r.data} ${r.hora}</td><td>${r.tecnico}</td><td>${gpsVal}</td><td>${r.obs || ''}</td></tr>`;
+  }).join('');
 
   const html = `
     <html><head><meta charset="UTF-8"><title>Relatório Meter Control</title>
@@ -1168,7 +1198,7 @@ function imprimirRelatorio() {
       <span class="stat">📊 Saldo: <strong>${entradas - saidas}</strong></span>
     </div>
     <table>
-      <thead><tr><th>Medidor</th><th>Tipo</th><th>Data/Hora</th><th>Técnico</th><th>Obs</th></tr></thead>
+      <thead><tr><th>Medidor</th><th>Tipo</th><th>Data/Hora</th><th>Técnico</th><th>GPS</th><th>Obs</th></tr></thead>
       <tbody>${linhas}</tbody>
     </table>
     </body></html>
@@ -1183,6 +1213,42 @@ function imprimirRelatorio() {
 // ══════════════════════════════════════════
 //  UTILS
 // ══════════════════════════════════════════
+// ── JSONP (contorna CORS do Apps Script) ──────────────────────
+function jsonpRequest(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'mc_cb_' + Date.now();
+    const script = document.createElement('script');
+    let done = false;
+
+    const cleanup = () => {
+      done = true;
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+
+    window[cbName] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+
+    const timer = setTimeout(() => {
+      if (!done) {
+        cleanup();
+        reject(new Error('Timeout'));
+      }
+    }, timeoutMs || 8000);
+
+    script.onerror = () => {
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error('Erro de rede'));
+    };
+
+    script.src = url + '&callback=' + cbName;
+    document.head.appendChild(script);
+  });
+}
+
 function toast(msg, type = '') {
   const t = document.getElementById('toast');
   t.textContent = msg;
