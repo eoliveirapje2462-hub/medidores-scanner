@@ -341,6 +341,7 @@
     transition: border-color 0.2s;
   }
   .btn-cam.active { border-color: var(--accent); color: var(--accent); }
+  #btn-torch.active { border-color: var(--yellow); color: var(--yellow); background: var(--yellow-glow); }
   .btn-cam:disabled { opacity: 0.4; pointer-events: none; }
 
   /* ── RESULTADO SCAN ── */
@@ -614,7 +615,7 @@
       <div class="scanner-controls">
         <button class="btn-cam" id="btn-cam-toggle" onclick="toggleCamera()">⏸ Pausar</button>
         <button class="btn-cam" id="btn-cam-switch" onclick="switchCamera()">🔄 Câmera</button>
-        <button class="btn-cam" id="btn-torch" onclick="toggleTorch()" disabled>🔦 Flash</button>
+        <button class="btn-cam" id="btn-torch" onclick="toggleTorch()">🔦 Flash</button>
       </div>
     </div>
 
@@ -911,11 +912,35 @@ function showTab(tab) {
 }
 
 // ══════════════════════════════════════════
-//  SCANNER
+//  SCANNER — alta precisão
 // ══════════════════════════════════════════
+
+// Debounce: exige o mesmo código N vezes seguidas antes de aceitar
+const CONFIRMACOES_NECESSARIAS = 2;
+let ultimoCodigoVisto = '';
+let contagemConfirmacao = 0;
+let focusInterval = null;
+
 async function initScanner() {
   try {
-    codeReader = new ZXing.BrowserMultiFormatReader();
+    // Hints para priorizar formatos de medidores de energia
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.CODE_93,
+      ZXing.BarcodeFormat.ITF,
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.QR_CODE,
+      ZXing.BarcodeFormat.DATA_MATRIX,
+    ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+    codeReader = new ZXing.BrowserMultiFormatReader(hints, {
+      delayBetweenScanAttempts: 80,   // tenta a cada 80ms (padrão: 500ms)
+      delayBetweenScanSuccess: 1500,  // aguarda 1.5s após leitura bem-sucedida
+    });
     await startCamera();
   } catch (e) {
     setStatus('Câmera não disponível — use o campo manual.');
@@ -929,7 +954,11 @@ async function startCamera() {
     const constraints = {
       video: {
         facingMode: useFrontCamera ? 'user' : { ideal: 'environment' },
-        width: { ideal: 1280 }, height: { ideal: 720 }
+        width:  { ideal: 1920, min: 1280 },
+        height: { ideal: 1080, min: 720 },
+        focusMode: { ideal: 'continuous' },
+        exposureMode: { ideal: 'continuous' },
+        whiteBalanceMode: { ideal: 'continuous' },
       }
     };
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -937,20 +966,31 @@ async function startCamera() {
     video.srcObject = currentStream;
     await video.play();
 
-    // Verificar suporte a torch
+    // Verificar suporte a torch e aplicar configurações avançadas
     const track = currentStream.getVideoTracks()[0];
     torchTrack = track;
     const caps = track.getCapabilities?.() || {};
     document.getElementById('btn-torch').disabled = !caps.torch;
 
+    // Foco contínuo — refoca a cada 3s para manter nitidez
+    clearInterval(focusInterval);
+    focusInterval = setInterval(async () => {
+      if (!cameraActive || !torchTrack) return;
+      try {
+        await torchTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+      } catch (_) {}
+    }, 3000);
+
     cameraActive = true;
+    ultimoCodigoVisto = '';
+    contagemConfirmacao = 0;
     document.getElementById('btn-cam-toggle').textContent = '⏸ Pausar';
     setStatus('Aponte para o código de barras');
 
     codeReader?.decodeFromStream(currentStream, video, (result, err) => {
       if (result) {
-        const code = result.getText();
-        onCodigoLido(code);
+        const code = result.getText().trim();
+        processarLeitura(code);
       }
     });
 
@@ -960,8 +1000,27 @@ async function startCamera() {
   }
 }
 
+// Debounce: confirma o código N vezes antes de aceitar
+function processarLeitura(code) {
+  if (code === ultimoCodigoVisto) {
+    contagemConfirmacao++;
+  } else {
+    ultimoCodigoVisto = code;
+    contagemConfirmacao = 1;
+    // Feedback visual leve na 1ª leitura
+    setStatus(`🔍 Confirmando: ${code}`);
+  }
+
+  if (contagemConfirmacao >= CONFIRMACOES_NECESSARIAS) {
+    contagemConfirmacao = 0;
+    ultimoCodigoVisto = '';
+    onCodigoLido(code);
+  }
+}
+
 function stopCamera() {
   if (!cameraActive) return;
+  clearInterval(focusInterval);
   codeReader?.reset?.();
   if (currentStream) {
     currentStream.getTracks().forEach(t => t.stop());
@@ -969,6 +1028,8 @@ function stopCamera() {
   }
   document.getElementById('preview').srcObject = null;
   cameraActive = false;
+  ultimoCodigoVisto = '';
+  contagemConfirmacao = 0;
   setStatus('Câmera pausada.');
   document.getElementById('btn-cam-toggle').textContent = '▶ Iniciar';
 }
@@ -984,14 +1045,56 @@ async function switchCamera() {
 }
 
 async function toggleTorch() {
-  if (!torchTrack) return;
   torchOn = !torchOn;
-  try {
-    await torchTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
-    document.getElementById('btn-torch').classList.toggle('active', torchOn);
-  } catch (e) {
-    toast('Flash não suportado.', 'warn');
+  const btn = document.getElementById('btn-torch');
+
+  // Estratégia 1: usar a track já ativa
+  if (torchTrack) {
+    try {
+      await torchTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
+      btn.classList.toggle('active', torchOn);
+      btn.textContent = torchOn ? '🔦 Flash ON' : '🔦 Flash';
+      return;
+    } catch (_) {}
   }
+
+  // Estratégia 2: pedir nova stream com torch ligado direto nas constraints
+  if (torchOn) {
+    try {
+      const streamTorch = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          advanced: [{ torch: true }]
+        }
+      });
+      // Substitui a track de vídeo mantendo o stream ativo
+      const newTrack = streamTorch.getVideoTracks()[0];
+      if (currentStream) {
+        const oldTrack = currentStream.getVideoTracks()[0];
+        if (oldTrack) { oldTrack.stop(); currentStream.removeTrack(oldTrack); }
+        currentStream.addTrack(newTrack);
+      }
+      torchTrack = newTrack;
+      btn.classList.add('active');
+      btn.textContent = '🔦 Flash ON';
+      return;
+    } catch (_) {}
+  } else {
+    // Desligar: para track atual e reinicia câmera normal
+    try {
+      if (torchTrack) torchTrack.stop();
+      torchOn = false;
+      btn.classList.remove('active');
+      btn.textContent = '🔦 Flash';
+      stopCamera();
+      await startCamera();
+      return;
+    } catch (_) {}
+  }
+
+  // Sem suporte nenhum
+  torchOn = !torchOn; // reverte
+  toast('Flash não suportado neste dispositivo.', 'warn');
 }
 
 function setStatus(msg) {
@@ -1000,13 +1103,12 @@ function setStatus(msg) {
 
 function onCodigoLido(code) {
   const campo = document.getElementById('campo-medidor');
-  if (campo.value === code) return; // evita re-trigger
+  if (campo.value === code) return;
   campo.value = code;
   campo.classList.add('success');
   setStatus(`✓ Lido: ${code}`);
   onMedidorInput(code);
-  toast('Código lido: ' + code, 'success');
-  // vibrar
+  toast('✓ Código lido: ' + code, 'success');
   if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
 }
 
