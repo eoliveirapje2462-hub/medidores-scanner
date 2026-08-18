@@ -1258,6 +1258,15 @@ async function processarFotoIA(input) {
     });
 
     const data = await response.json();
+    console.log('Vision API response:', JSON.stringify(data));
+
+    // Verifica erro da API
+    if (data.error) {
+      throw new Error('Vision API: ' + data.error.message);
+    }
+    if (data.responses?.[0]?.error) {
+      throw new Error('Vision: ' + data.responses[0].error.message);
+    }
 
     // Extrai todo o texto detectado
     let textoCompleto = '';
@@ -1267,15 +1276,17 @@ async function processarFotoIA(input) {
       textoCompleto = data.responses[0].textAnnotations[0].description || '';
     }
 
+    console.log('Texto detectado:', textoCompleto);
+
     // Extrai número do medidor — sequência de 5+ dígitos com ou sem hífen
     let texto = 'NAO_ENCONTRADO';
     if (textoCompleto) {
       const matches = textoCompleto.match(/\d{5,}-?\d*/g);
       if (matches && matches.length > 0) {
-        // Pega o número mais longo (mais provável ser o serial)
         texto = matches.reduce((a, b) => a.length >= b.length ? a : b);
       }
     }
+    console.log('Número extraído:', texto);
 
     if (!texto || texto === 'NAO_ENCONTRADO') {
       toast('IA não encontrou número. Tente digitar manualmente.', 'warn');
@@ -1285,9 +1296,10 @@ async function processarFotoIA(input) {
     }
 
   } catch (e) {
-    console.error(e);
+    console.error('OCR erro:', e);
+    toast('Erro: ' + e.message, 'error');
     // Falhou — oferece digitar manualmente
-    const num = prompt('Não foi possível ler a imagem. Digite o número manualmente:');
+    const num = prompt('Erro: ' + e.message + '\n\nDigite o número manualmente:');
     if (num && num.trim()) {
       onCodigoLido(num.trim());
     } else {
