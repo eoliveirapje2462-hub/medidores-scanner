@@ -361,21 +361,6 @@
   #btn-capturar:active { background: var(--accent-dark); transform: scale(0.97); }
   #btn-capturar:disabled { opacity: 0.4; pointer-events: none; }
 
-  #btn-ocr {
-    background: #7c3aed;
-    color: #fff;
-    border: none;
-    border-radius: var(--radius-sm);
-    font-size: 15px;
-    font-weight: 700;
-    padding: 16px 8px;
-    cursor: pointer;
-    font-family: var(--font);
-    transition: background 0.15s, transform 0.1s;
-    box-shadow: 0 4px 16px rgba(124,58,237,0.3);
-  }
-  #btn-ocr:active { background: #6d28d9; transform: scale(0.97); }
-  #btn-ocr:disabled { opacity: 0.4; pointer-events: none; }
   #btn-torch.active { border-color: var(--yellow); color: var(--yellow); background: var(--yellow-glow); }
   .btn-cam:disabled { opacity: 0.4; pointer-events: none; }
 
@@ -647,16 +632,10 @@
         <div class="scanner-status" id="cam-status">Iniciando câmera...</div>
       </div>
 
-      <!-- Botões de leitura -->
-      <div style="display:flex;gap:8px;margin-bottom:10px;">
-        <button id="btn-capturar" onclick="capturarFrame()" style="flex:1">
-          📷 Ler código de barras
-        </button>
-        <button id="btn-ocr" onclick="lerComIA()" style="flex:1">
-          🤖 IA / Manual
-        </button>
-      </div>
-      <input type="file" id="input-foto" accept="image/*" capture="environment" style="display:none" onchange="processarFotoIA(this)">
+      <!-- Botão de captura -->
+      <button id="btn-capturar" onclick="capturarFrame()">
+        📷 Capturar código de barras
+      </button>
 
       <div class="scanner-controls">
         <button class="btn-cam" id="btn-cam-toggle" onclick="toggleCamera()">⏸ Pausar</button>
@@ -1204,114 +1183,6 @@ async function toggleTorch() {
 
 function setStatus(msg) {
   document.getElementById('cam-status').textContent = msg;
-}
-
-// ══════════════════════════════════════════
-//  OCR VIA CLAUDE API
-// ══════════════════════════════════════════
-
-function lerComIA() {
-  document.getElementById('input-foto').click();
-}
-
-async function processarFotoIA(input) {
-  if (!input.files || !input.files[0]) return;
-
-  // Se offline, abre teclado direto
-  if (!navigator.onLine) {
-    input.value = '';
-    const num = prompt('Sem internet. Digite o número do medidor manualmente:');
-    if (num && num.trim()) onCodigoLido(num.trim());
-    return;
-  }
-
-  const file = input.files[0];
-  const btn  = document.getElementById('btn-ocr');
-  btn.disabled = true;
-  btn.textContent = '⏳ Analisando...';
-  setStatus('🤖 IA lendo os números...');
-
-  try {
-    // Converte imagem para base64
-    const base64 = await new Promise((res, rej) => {
-      const reader = new FileReader();
-      reader.onload  = () => res(reader.result.split(',')[1]);
-      reader.onerror = rej;
-      reader.readAsDataURL(file);
-    });
-
-    const mediaType = file.type || 'image/jpeg';
-
-    // Google Cloud Vision API — OCR de texto em imagens
-    const VISION_KEY = 'AIzaSyAI9j7FV0OX-uxfA0FWf8xUNSurom-dhug';
-    const visionUrl  = `https://vision.googleapis.com/v1/images:annotate?key=${VISION_KEY}`;
-
-    const response = await fetch(visionUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requests: [{
-          image: { content: base64 },
-          features: [{ type: 'TEXT_DETECTION', maxResults: 1 }]
-        }]
-      })
-    });
-
-    const data = await response.json();
-    console.log('Vision API response:', JSON.stringify(data));
-
-    // Verifica erro da API
-    if (data.error) {
-      throw new Error('Vision API: ' + data.error.message);
-    }
-    if (data.responses?.[0]?.error) {
-      throw new Error('Vision: ' + data.responses[0].error.message);
-    }
-
-    // Extrai todo o texto detectado
-    let textoCompleto = '';
-    if (data.responses?.[0]?.fullTextAnnotation) {
-      textoCompleto = data.responses[0].fullTextAnnotation.text || '';
-    } else if (data.responses?.[0]?.textAnnotations?.[0]) {
-      textoCompleto = data.responses[0].textAnnotations[0].description || '';
-    }
-
-    console.log('Texto detectado:', textoCompleto);
-
-    // Extrai número do medidor — sequência de 5+ dígitos com ou sem hífen
-    let texto = 'NAO_ENCONTRADO';
-    if (textoCompleto) {
-      const matches = textoCompleto.match(/\d{5,}-?\d*/g);
-      if (matches && matches.length > 0) {
-        texto = matches.reduce((a, b) => a.length >= b.length ? a : b);
-      }
-    }
-    console.log('Número extraído:', texto);
-
-    if (!texto || texto === 'NAO_ENCONTRADO') {
-      toast('IA não encontrou número. Tente digitar manualmente.', 'warn');
-      setStatus('Número não encontrado — tente novamente.');
-    } else {
-      onCodigoLido(texto);
-    }
-
-  } catch (e) {
-    console.error('OCR erro:', e);
-    toast('Erro: ' + e.message, 'error');
-    // Falhou — oferece digitar manualmente
-    const num = prompt('Erro: ' + e.message + '\n\nDigite o número manualmente:');
-    if (num && num.trim()) {
-      onCodigoLido(num.trim());
-    } else {
-      toast('Digite o número no campo abaixo.', 'warn');
-      setStatus('Digite o número manualmente.');
-      document.getElementById('campo-medidor').focus();
-    }
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '🤖 Ler números (IA)';
-    input.value = '';
-  }
 }
 
 function onCodigoLido(code) {
