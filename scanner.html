@@ -653,7 +653,7 @@
           📷 Ler código de barras
         </button>
         <button id="btn-ocr" onclick="lerComIA()" style="flex:1">
-          🤖 Ler números (IA)
+          🤖 IA / Manual
         </button>
       </div>
       <input type="file" id="input-foto" accept="image/*" capture="environment" style="display:none" onchange="processarFotoIA(this)">
@@ -1217,6 +1217,14 @@ function lerComIA() {
 async function processarFotoIA(input) {
   if (!input.files || !input.files[0]) return;
 
+  // Se offline, abre teclado direto
+  if (!navigator.onLine) {
+    input.value = '';
+    const num = prompt('Sem internet. Digite o número do medidor manualmente:');
+    if (num && num.trim()) onCodigoLido(num.trim());
+    return;
+  }
+
   const file = input.files[0];
   const btn  = document.getElementById('btn-ocr');
   btn.disabled = true;
@@ -1234,26 +1242,40 @@ async function processarFotoIA(input) {
 
     const mediaType = file.type || 'image/jpeg';
 
-    // Envia imagem para o Apps Script que chama a API Claude com segurança
-    const ocrUrl = APPS_SCRIPT_URL + '?action=ocr&callback=mc_ocr_cb';
-    const texto = await new Promise((resolve, reject) => {
-      const cbName = 'mc_ocr_cb';
-      // Para OCR usamos POST via form (Apps Script aceita doPost)
-      // Como JSONP só suporta GET, enviamos base64 via fetch normal para o Apps Script
-      // O Apps Script tem a chave da API internamente
-      fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'ocr',
-          image: base64,
-          mediaType: mediaType
-        })
+    // Google Cloud Vision API — OCR de texto em imagens
+    const VISION_KEY = 'AIzaSyAI9j7FV0OX-uxfA0FWf8xUNSurom-dhug';
+    const visionUrl  = `https://vision.googleapis.com/v1/images:annotate?key=${VISION_KEY}`;
+
+    const response = await fetch(visionUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{
+          image: { content: base64 },
+          features: [{ type: 'TEXT_DETECTION', maxResults: 1 }]
+        }]
       })
-      .then(r => r.json())
-      .then(d => resolve(d.numero || 'NAO_ENCONTRADO'))
-      .catch(reject);
     });
+
+    const data = await response.json();
+
+    // Extrai todo o texto detectado
+    let textoCompleto = '';
+    if (data.responses?.[0]?.fullTextAnnotation) {
+      textoCompleto = data.responses[0].fullTextAnnotation.text || '';
+    } else if (data.responses?.[0]?.textAnnotations?.[0]) {
+      textoCompleto = data.responses[0].textAnnotations[0].description || '';
+    }
+
+    // Extrai número do medidor — sequência de 5+ dígitos com ou sem hífen
+    let texto = 'NAO_ENCONTRADO';
+    if (textoCompleto) {
+      const matches = textoCompleto.match(/\d{5,}-?\d*/g);
+      if (matches && matches.length > 0) {
+        // Pega o número mais longo (mais provável ser o serial)
+        texto = matches.reduce((a, b) => a.length >= b.length ? a : b);
+      }
+    }
 
     if (!texto || texto === 'NAO_ENCONTRADO') {
       toast('IA não encontrou número. Tente digitar manualmente.', 'warn');
@@ -1263,9 +1285,16 @@ async function processarFotoIA(input) {
     }
 
   } catch (e) {
-    toast('Erro ao processar imagem.', 'error');
-    setStatus('Erro na IA — tente o campo manual.');
     console.error(e);
+    // Falhou — oferece digitar manualmente
+    const num = prompt('Não foi possível ler a imagem. Digite o número manualmente:');
+    if (num && num.trim()) {
+      onCodigoLido(num.trim());
+    } else {
+      toast('Digite o número no campo abaixo.', 'warn');
+      setStatus('Digite o número manualmente.');
+      document.getElementById('campo-medidor').focus();
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = '🤖 Ler números (IA)';
