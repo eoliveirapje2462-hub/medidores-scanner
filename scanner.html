@@ -853,7 +853,8 @@ async function verificarLicenca(isInit = false) {
     return;
   }
 
-  switch (status.situacao) {
+  const sit = (status.situacao || '').toUpperCase();
+  switch (sit) {
     case 'ATIVA':
       mostrarApp('ativa', status.diasRestantes);
       break;
@@ -865,8 +866,10 @@ async function verificarLicenca(isInit = false) {
       break;
     case 'EXPIRADA':
     case 'BLOQUEADA':
+      mostrarBloqueio(sit, status.mensagem);
+      break;
     default:
-      mostrarBloqueio(status.situacao, status.mensagem);
+      mostrarApp('trial', status.diasRestantes);
       break;
   }
 }
@@ -879,10 +882,14 @@ function mostrarApp(situacao, diasRestantes) {
   const banner = document.getElementById('aviso-banner');
 
   if (situacao === 'trial') {
-    badge.textContent = `Trial · ${diasRestantes ?? '?'}d`;
+    const d = (diasRestantes != null && diasRestantes >= 0) ? diasRestantes : '?';
+    badge.textContent = `Trial · ${d}d`;
     badge.className = 'header-badge badge-trial';
-    if (diasRestantes <= 3) {
-      banner.innerHTML = `⏳ Seu trial encerra em <strong>${diasRestantes} dia(s)</strong>. <a href="${getWhatsappLink('trial')}" target="_blank">Ative sua licença →</a>`;
+    if (typeof d === 'number' && d <= 3) {
+      banner.innerHTML = `⏳ Seu trial encerra em <strong>${d} dia(s)</strong>. <a href="${getWhatsappLink('trial')}" target="_blank">Ative sua licença →</a>`;
+      banner.classList.add('show');
+    } else if (d === '?') {
+      banner.innerHTML = `⏳ Trial ativo. <a href="${getWhatsappLink('trial')}" target="_blank">Ative sua licença →</a>`;
       banner.classList.add('show');
     }
   } else if (situacao === 'aviso') {
@@ -1227,30 +1234,26 @@ async function processarFotoIA(input) {
 
     const mediaType = file.type || 'image/jpeg';
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 100,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data: base64 }
-            },
-            {
-              type: 'text',
-              text: 'Esta é uma foto de um medidor de energia elétrica. Encontre o número de série ou código do medidor (geralmente está impresso em destaque ou abaixo do código de barras). Responda APENAS com o número, sem texto, sem explicação, sem traços ou espaços extras. Se houver hífen no número original mantenha-o. Se não encontrar nenhum número, responda: NAO_ENCONTRADO'
-            }
-          ]
-        }]
+    // Envia imagem para o Apps Script que chama a API Claude com segurança
+    const ocrUrl = APPS_SCRIPT_URL + '?action=ocr&callback=mc_ocr_cb';
+    const texto = await new Promise((resolve, reject) => {
+      const cbName = 'mc_ocr_cb';
+      // Para OCR usamos POST via form (Apps Script aceita doPost)
+      // Como JSONP só suporta GET, enviamos base64 via fetch normal para o Apps Script
+      // O Apps Script tem a chave da API internamente
+      fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ocr',
+          image: base64,
+          mediaType: mediaType
+        })
       })
+      .then(r => r.json())
+      .then(d => resolve(d.numero || 'NAO_ENCONTRADO'))
+      .catch(reject);
     });
-
-    const data = await response.json();
-    const texto = (data.content?.[0]?.text || '').trim();
 
     if (!texto || texto === 'NAO_ENCONTRADO') {
       toast('IA não encontrou número. Tente digitar manualmente.', 'warn');
