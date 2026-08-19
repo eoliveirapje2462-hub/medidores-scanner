@@ -1,123 +1,111 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Registro de Medidores</title>
-  <!-- Biblioteca para leitura de Código de Barras / QR Code -->
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Biblioteca de leitura de código de barras -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background-color: #0b0f19; color: #f1f5f9; padding: 12px; }
-
-    /* Navegação por Abas */
-    .tabs { display: flex; border-bottom: 2px solid #1e293b; margin-bottom: 16px; }
-    .tab-btn { flex: 1; padding: 12px; background: none; border: none; color: #94a3b8; font-weight: 600; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .tab-btn.active { color: #6366f1; border-bottom: 2px solid #6366f1; }
-
-    /* Containers e Cards */
-    .card { background: #111827; border: 1px solid #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-    
-    /* Toggle e Leitor */
-    .scanner-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .scanner-title { font-size: 0.95rem; font-weight: 600; color: #e2e8f0; }
-    .switch-label { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #94a3b8; }
-    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .3s; border-radius: 24px; }
-    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
-    input:checked + .slider { background-color: #6366f1; }
-    input:checked + .slider:before { transform: translateX(20px); }
-
-    #reader { width: 100%; border-radius: 8px; overflow: hidden; background: #000; margin-bottom: 12px; }
-
-    /* Inputs e Form */
-    .form-group { margin-bottom: 14px; }
-    label { display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 6px; font-weight: 500; }
-    input[type="text"] { width: 100%; padding: 12px; font-size: 1rem; background-color: #090d16; border: 1px solid #1e293b; border-radius: 8px; color: #fff; outline: none; }
-    input[type="text"]:focus { border-color: #6366f1; }
-
-    /* Botões Tipo de Movimentação (Entrada/Saída) */
-    .tipo-group { display: flex; gap: 10px; }
-    .btn-tipo { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #1e293b; background: #131c2e; color: #94a3b8; font-size: 0.95rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
-    .btn-tipo.active-entrada { background: #064e3b; border-color: #10b981; color: #34d399; }
-    .btn-tipo.active-saida { background: #7f1d1d; border-color: #ef4444; color: #f87171; }
-
-    /* Status e Botão Ação */
-    .gps-status { font-size: 0.8rem; color: #10b981; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
-    .gps-dot { width: 6px; height: 6px; background-color: #10b981; border-radius: 50%; display: inline-block; }
-
-    .btn-main { width: 100%; padding: 14px; font-size: 1rem; font-weight: 600; color: #fff; background-color: #4f46e5; border: none; border-radius: 8px; cursor: pointer; }
-    .btn-confirmar { background-color: #059669; }
-    .btn-confirmar:hover { background-color: #047857; }
-
-    /* Banner Alerta de Erro / Sucesso */
-    .alert-banner { display: none; padding: 14px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; text-align: center; margin-top: 16px; }
-    .alert-erro { background-color: #dc2626; color: #fff; }
-    .alert-sucesso { background-color: #059669; color: #fff; }
-  </style>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              500: '#6366f1',
+              600: '#4f46e5',
+            }
+          }
+        }
+      }
+    }
+  </script>
 </head>
-<body>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto antialiased">
 
-  <!-- Abas superiores -->
-  <div class="tabs">
-    <button class="tab-btn active">📋 Registrar</button>
-    <button class="tab-btn">📦 Histórico</button>
-  </div>
+  <div>
+    <!-- Abas Superiores -->
+    <nav class="flex border-b border-slate-800 mb-6">
+      <button class="flex-1 py-3 text-center text-sm font-semibold text-indigo-400 border-b-2 border-indigo-500 transition-colors">
+        📋 Registrar
+      </button>
+      <button class="flex-1 py-3 text-center text-sm font-semibold text-slate-500 hover:text-slate-300 transition-colors">
+        📦 Histórico
+      </button>
+    </nav>
 
-  <!-- Bloco do Scanner -->
-  <div class="card">
-    <div class="scanner-header">
-      <span class="scanner-title">Scanner de Código / QR</span>
-      <label class="switch-label">
-        Modo Lote
-        <label class="switch">
-          <input type="checkbox" id="modoLote">
-          <span class="slider"></span>
+    <!-- Card 1: Scanner -->
+    <div class="bg-slate-900 border border-slate-800/80 rounded-xl p-5 mb-4 shadow-sm">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-slate-200">Scanner de Código / QR</h2>
+        <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-slate-400">
+          <span>Modo Lote</span>
+          <input type="checkbox" id="modoLote" class="sr-only peer">
+          <div class="relative w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
         </label>
-      </label>
+      </div>
+
+      <div id="reader" class="hidden overflow-hidden rounded-lg bg-black mb-4 min-h-[160px]"></div>
+
+      <button type="button" id="btnCam" onclick="iniciarLeitor()" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
+        📷 Abrir Câmera
+      </button>
     </div>
 
-    <div id="reader" style="display: none;"></div>
-
-    <button type="button" class="btn-main" id="btnCam" onclick="iniciarLeitor()">📷 Abrir Câmera</button>
-  </div>
-
-  <!-- Formuário -->
-  <div class="card">
-    <form id="formMedidor" onsubmit="salvarDados(event)">
-      
-      <div class="form-group">
-        <label>Número do Medidor / Série</label>
-        <input type="text" id="numeroMedidor" placeholder="Escaneie ou digite" required>
-      </div>
-
-      <div class="form-group">
-        <label>Tipo de Movimentação</label>
-        <div class="tipo-group">
-          <button type="button" class="btn-tipo active-entrada" id="btnEntrada" onclick="selecionarTipo('Entrada')">📥 Entrada</button>
-          <button type="button" class="btn-tipo" id="btnSaida" onclick="selecionarTipo('Saída')">📤 Saída</button>
+    <!-- Card 2: Formulário -->
+    <div class="bg-slate-900 border border-slate-800/80 rounded-xl p-5 shadow-sm">
+      <form id="formMedidor" onsubmit="salvarDados(event)" class="space-y-4">
+        
+        <!-- Input Medidor -->
+        <div>
+          <label for="numeroMedidor" class="block text-xs font-medium text-slate-400 mb-1.5">Número do Medidor / Série *</label>
+          <input type="text" id="numeroMedidor" placeholder="Escaneie ou digite" required class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-indigo-500 transition-colors">
         </div>
-      </div>
 
-      <div class="form-group" style="margin-top: 14px;">
-        <label>Observação / Destino</label>
-        <input type="text" id="observacao" placeholder="Ex: Estoque, Cliente X...">
-      </div>
+        <!-- Seletor Entrada / Saída -->
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5">Tipo de Movimentação</label>
+          <div class="grid grid-cols-2 gap-3">
+            <button type="button" id="btnEntrada" onclick="selecionarTipo('Entrada')" class="py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-emerald-950/60 border-emerald-500/40 text-emerald-400">
+              📥 Entrada
+            </button>
+            <button type="button" id="btnSaida" onclick="selecionarTipo('Saída')" class="py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200">
+              📤 Saída
+            </button>
+          </div>
+        </div>
 
-      <div class="gps-status">
-        <span class="gps-dot"></span>
-        <span id="txtGps">GPS capturado (obtendo...)</span>
-      </div>
+        <!-- Input Observação -->
+        <div>
+          <label for="observacao" class="block text-xs font-medium text-slate-400 mb-1.5">Observação / Destino</label>
+          <input type="text" id="observacao" placeholder="Ex: Estoque, Cliente X..." class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-indigo-500 transition-colors">
+        </div>
 
-      <button type="submit" class="btn-main btn-confirmar" id="btnSalvar">Confirmar Movimentação</button>
-    </form>
+        <!-- Status GPS -->
+        <div class="flex items-center gap-2 text-xs text-emerald-400 pt-1">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span id="txtGps">GPS capturado (obtendo...)</span>
+        </div>
+
+        <!-- Botão de Confirmação -->
+        <button type="submit" id="btnSalvar" class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl shadow-sm transition-all mt-2">
+          Confirmar Movimentação
+        </button>
+      </form>
+    </div>
   </div>
 
-  <!-- Banner de Mensagens (Erro / Sucesso) -->
-  <div id="alertBanner" class="alert-banner"></div>
+  <!-- Banner de Notificação -->
+  <div id="alertBanner" class="hidden mt-4 p-4 rounded-xl text-center font-semibold text-sm shadow-sm transition-all"></div>
 
 <script>
+  // ⚠️ SUBSTITUA COM SUA URL DO GOOGLE APPS SCRIPT
   const APPS_URL = "https://script.google.com/macros/s/SUA_URL_AQUI/exec";
 
   let html5QrCode = null;
@@ -134,11 +122,11 @@
     const btnSaida = document.getElementById('btnSaida');
 
     if (tipo === 'Entrada') {
-      btnEntrada.className = 'btn-tipo active-entrada';
-      btnSaida.className = 'btn-tipo';
+      btnEntrada.className = 'py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-emerald-950/60 border-emerald-500/40 text-emerald-400';
+      btnSaida.className = 'py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200';
     } else {
-      btnEntrada.className = 'btn-tipo';
-      btnSaida.className = 'btn-tipo active-saida';
+      btnEntrada.className = 'py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200';
+      btnSaida.className = 'py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-rose-950/60 border-rose-500/40 text-rose-400';
     }
   }
 
@@ -158,12 +146,12 @@
     }
   }
 
-  // --- LEITOR CORRIGIDO ---
+  // --- LEITOR DE CÓDIGO ---
   async function iniciarLeitor() {
     const readerDiv = document.getElementById('reader');
     const btnCam = document.getElementById('btnCam');
     
-    readerDiv.style.display = 'block';
+    readerDiv.classList.remove('hidden');
     btnCam.innerText = "Fechar Câmera";
     btnCam.onclick = pararLeitor;
 
@@ -184,11 +172,8 @@
 
     const onScanSuccess = (decodedText) => {
       document.getElementById('numeroMedidor').value = decodedText;
-      
       const modoLote = document.getElementById('modoLote').checked;
-      if (!modoLote) {
-        pararLeitor();
-      }
+      if (!modoLote) pararLeitor();
     };
 
     try {
@@ -214,12 +199,12 @@
 
     if (html5QrCode && html5QrCode.isScanning) {
       html5QrCode.stop().then(() => {
-        readerDiv.style.display = 'none';
+        readerDiv.classList.add('hidden');
         btnCam.innerText = "📷 Abrir Câmera";
         btnCam.onclick = iniciarLeitor;
       });
     } else {
-      readerDiv.style.display = 'none';
+      readerDiv.classList.add('hidden');
       btnCam.innerText = "📷 Abrir Câmera";
       btnCam.onclick = iniciarLeitor;
     }
@@ -228,12 +213,14 @@
   function exibirAlerta(msg, tipo) {
     const banner = document.getElementById('alertBanner');
     banner.innerText = msg;
-    banner.className = "alert-banner " + (tipo === "erro" ? "alert-erro" : "alert-sucesso");
-    banner.style.display = "block";
-    setTimeout(() => { banner.style.display = "none"; }, 4000);
+    banner.className = `p-4 rounded-xl text-center font-semibold text-sm shadow-sm transition-all ${
+      tipo === 'erro' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
+    }`;
+    banner.classList.remove('hidden');
+    setTimeout(() => { banner.classList.add('hidden'); }, 4000);
   }
 
-  // --- ENVIO DADOS ---
+  // --- ENVIO DADOS (JSONP) ---
   function salvarDados(event) {
     event.preventDefault();
     const btn = document.getElementById('btnSalvar');
@@ -241,7 +228,6 @@
 
     const numero = document.getElementById('numeroMedidor').value.trim();
     const observacao = document.getElementById('observacao').value.trim();
-
     const callbackName = 'jsonp_cb_' + Math.round(100000 * Math.random());
 
     window[callbackName] = function(data) {
@@ -250,7 +236,7 @@
       btn.disabled = false;
 
       if (data.status === 'sucesso') {
-        exibirAlerta("Movimentação registrada!", "sucesso");
+        exibirAlerta("Movimentação registrada com sucesso!", "sucesso");
         document.getElementById('numeroMedidor').value = "";
       } else {
         exibirAlerta(data.mensagem || "Erro ao salvar", "erro");
@@ -268,7 +254,7 @@
     const script = document.createElement('script');
     script.src = url;
     script.onerror = function() {
-      exibirAlerta("Falha ao comunicar com o servidor.", "erro");
+      exibirAlerta("Falha de comunicação com o servidor.", "erro");
       btn.disabled = false;
     };
     document.body.appendChild(script);
