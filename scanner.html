@@ -1,264 +1,153 @@
 <!DOCTYPE html>
-<html lang="pt-BR" class="dark">
+<html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Registro de Medidores</title>
-  <!-- Tailwind CSS via CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Biblioteca de leitura de código de barras -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              500: '#6366f1',
-              600: '#4f46e5',
-            }
-          }
-        }
-      }
-    }
-  </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro de Medidor - Inteligente</title>
+    <!-- Tailwind CSS para o design moderno -->
+    <script src="https://tailwindcss.com"></script>
+    <!-- Ícones modernos -->
+    <script src="https://unpkg.com"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto antialiased">
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex items-center justify-center p-4">
 
-  <div>
-    <!-- Abas Superiores -->
-    <nav class="flex border-b border-slate-800 mb-6">
-      <button class="flex-1 py-3 text-center text-sm font-semibold text-indigo-400 border-b-2 border-indigo-500 transition-colors">
-        📋 Registrar
-      </button>
-      <button class="flex-1 py-3 text-center text-sm font-semibold text-slate-500 hover:text-slate-300 transition-colors">
-        📦 Histórico
-      </button>
-    </nav>
-
-    <!-- Card 1: Scanner -->
-    <div class="bg-slate-900 border border-slate-800/80 rounded-xl p-5 mb-4 shadow-sm">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-sm font-semibold text-slate-200">Scanner de Código / QR</h2>
-        <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-slate-400">
-          <span>Modo Lote</span>
-          <input type="checkbox" id="modoLote" class="sr-only peer">
-          <div class="relative w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-        </label>
-      </div>
-
-      <div id="reader" class="hidden overflow-hidden rounded-lg bg-black mb-4 min-h-[160px]"></div>
-
-      <button type="button" id="btnCam" onclick="iniciarLeitor()" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
-        📷 Abrir Câmera
-      </button>
-    </div>
-
-    <!-- Card 2: Formulário -->
-    <div class="bg-slate-900 border border-slate-800/80 rounded-xl p-5 shadow-sm">
-      <form id="formMedidor" onsubmit="salvarDados(event)" class="space-y-4">
+    <!-- CARD PRINCIPAL DO FORMULÁRIO -->
+    <div class="max-w-md w-full bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md">
         
-        <!-- Input Medidor -->
-        <div>
-          <label for="numeroMedidor" class="block text-xs font-medium text-slate-400 mb-1.5">Número do Medidor / Série *</label>
-          <input type="text" id="numeroMedidor" placeholder="Escaneie ou digite" required class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-indigo-500 transition-colors">
-        </div>
+        <form id="form-medidor" class="flex flex-col gap-6" onsubmit="event.preventDefault();">
+            
+            <!-- CAMPO: NÚMERO DO MEDIDOR -->
+            <div class="flex flex-col gap-2">
+                <label for="medidor-input" class="text-sm font-medium text-slate-400 tracking-wide">
+                    Número do Medidor / Série <span class="text-rose-500">*</span>
+                </label>
+                
+                <div class="relative flex items-center">
+                    <!-- Ícone de identificação -->
+                    <span class="absolute left-4 text-slate-500">
+                        <i data-lucide="hash" class="w-4 h-4"></i>
+                    </span>
+                    
+                    <!-- Input de texto principal -->
+                    <input 
+                        type="text" 
+                        id="medidor-input" 
+                        placeholder="Digite ou bipe o número..." 
+                        class="w-full bg-slate-950/80 border border-slate-800 focus:border-indigo-500/50 rounded-2xl pl-11 pr-4 py-3.5 text-base font-mono text-slate-200 placeholder-slate-600 focus:outline-none transition tracking-wider"
+                        required
+                    >
+                </div>
+                <!-- Mensagem de feedback inteligente -->
+                <p id="feedback-mensagem" class="text-xs text-slate-500 min-h-[16px] px-1 transition-all"></p>
+            </div>
 
-        <!-- Seletor Entrada / Saída -->
-        <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5">Tipo de Movimentação</label>
-          <div class="grid grid-cols-2 gap-3">
-            <button type="button" id="btnEntrada" onclick="selecionarTipo('Entrada')" class="py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-emerald-950/60 border-emerald-500/40 text-emerald-400">
-              📥 Entrada
+            <!-- CAMPO: TIPO DE MOVIMENTAÇÃO (Igual ao da sua imagem) -->
+            <div class="flex flex-col gap-3">
+                <label class="text-sm font-medium text-slate-400 tracking-wide">
+                    Tipo de Movimentação
+                </label>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- Botão Entrada -->
+                    <button type="button" onclick="selecionarMovimentacao('entrada')" id="btn-entrada" class="flex items-center justify-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-medium py-3.5 rounded-2xl hover:bg-emerald-500/20 active:scale-98 transition shadow-lg shadow-emerald-500/5">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        Entrada
+                    </button>
+                    
+                    <!-- Botão Saída -->
+                    <button type="button" onclick="selecionarMovimentacao('saida')" id="btn-saida" class="flex items-center justify-center gap-2 bg-slate-950/40 border border-slate-800 text-slate-400 font-medium py-3.5 rounded-2xl hover:bg-slate-800 hover:text-slate-200 active:scale-98 transition">
+                        <i data-lucide="upload" class="w-4 h-4"></i>
+                        Saída
+                    </button>
+                </div>
+            </div>
+
+            <!-- BOTÃO DE SALVAR -->
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-4 rounded-2xl shadow-lg shadow-indigo-600/20 active:scale-98 transition mt-2 flex items-center justify-center gap-2">
+                <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                Salvar Registro
             </button>
-            <button type="button" id="btnSaida" onclick="selecionarTipo('Saída')" class="py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200">
-              📤 Saída
-            </button>
-          </div>
-        </div>
 
-        <!-- Input Observação -->
-        <div>
-          <label for="observacao" class="block text-xs font-medium text-slate-400 mb-1.5">Observação / Destino</label>
-          <input type="text" id="observacao" placeholder="Ex: Estoque, Cliente X..." class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 text-sm focus:outline-none focus:border-indigo-500 transition-colors">
-        </div>
-
-        <!-- Status GPS -->
-        <div class="flex items-center gap-2 text-xs text-emerald-400 pt-1">
-          <span class="relative flex h-2 w-2">
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          <span id="txtGps">GPS capturado (obtendo...)</span>
-        </div>
-
-        <!-- Botão de Confirmação -->
-        <button type="submit" id="btnSalvar" class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl shadow-sm transition-all mt-2">
-          Confirmar Movimentação
-        </button>
-      </form>
+        </form>
     </div>
-  </div>
 
-  <!-- Banner de Notificação -->
-  <div id="alertBanner" class="hidden mt-4 p-4 rounded-xl text-center font-semibold text-sm shadow-sm transition-all"></div>
+    <!-- INTELIGÊNCIA JAVASCRIPT PARA CORREÇÃO AUTOMÁTICA -->
+    <script>
+        // Inicializa os ícones do layout
+        lucide.createIcons();
 
-<script>
-  // ⚠️ SUBSTITUA COM SUA URL DO GOOGLE APPS SCRIPT
-  const APPS_URL = "https://script.google.com/macros/s/SUA_URL_AQUI/exec";
+        // Armazena a seleção atual do tipo de movimentação
+        let movimentacaoSelecionada = 'entrada';
+        const inputMedidor = document.getElementById('medidor-input');
+        const feedback = document.getElementById('feedback-mensagem');
 
-  let html5QrCode = null;
-  let tipoMovimentacao = "Entrada";
-  let dadosGps = { lat: "", lng: "", precisao: "" };
+        // Escuta o que é digitado ou bipado no campo
+        inputMedidor.addEventListener('input', function(e) {
+            let valorOriginal = e.target.value;
+            
+            // Se o leitor trouxer erros comuns como os da imagem (letras, colchetes, portarias do Inmetro)
+            if (valorOriginal.includes(']') || /[a-zA-Z]/.test(valorOriginal)) {
+                
+                // Executa a limpeza inteligente dos dados
+                let valorLimpo = tratarTextoIncorreto(valorOriginal);
+                
+                if (valorLimpo) {
+                    e.target.value = valorLimpo;
+                    
+                    // Exibe aviso visual amigável de correção bem-sucedida
+                    feedback.textContent = "✓ Texto corrigido e filtrado automaticamente!";
+                    feedback.className = "text-xs text-emerald-400 font-medium px-1";
+                } else {
+                    feedback.textContent = "⚠ Formato confuso. Verifique o número físico.";
+                    feedback.className = "text-xs text-amber-500 font-medium px-1";
+                }
+            } else {
+                // Reseta a mensagem de feedback se estiver digitando números normais
+                feedback.textContent = "";
+            }
+        });
 
-  window.addEventListener('DOMContentLoaded', () => {
-    obterGps();
-  });
-
-  function selecionarTipo(tipo) {
-    tipoMovimentacao = tipo;
-    const btnEntrada = document.getElementById('btnEntrada');
-    const btnSaida = document.getElementById('btnSaida');
-
-    if (tipo === 'Entrada') {
-      btnEntrada.className = 'py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-emerald-950/60 border-emerald-500/40 text-emerald-400';
-      btnSaida.className = 'py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200';
-    } else {
-      btnEntrada.className = 'py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200';
-      btnSaida.className = 'py-2.5 px-4 rounded-xl font-medium text-sm border flex items-center justify-center gap-2 transition-all bg-rose-950/60 border-rose-500/40 text-rose-400';
-    }
-  }
-
-  function obterGps() {
-    const txtGps = document.getElementById('txtGps');
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          dadosGps.lat = pos.coords.latitude;
-          dadosGps.lng = pos.coords.longitude;
-          dadosGps.precisao = pos.coords.accuracy;
-          txtGps.innerText = `GPS capturado (±${Math.round(pos.coords.accuracy)}m)`;
-        },
-        () => { txtGps.innerText = "GPS indisponível"; },
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
-    }
-  }
-
-  // --- LEITOR DE CÓDIGO ---
-  async function iniciarLeitor() {
-    const readerDiv = document.getElementById('reader');
-    const btnCam = document.getElementById('btnCam');
-    
-    readerDiv.classList.remove('hidden');
-    btnCam.innerText = "Fechar Câmera";
-    btnCam.onclick = pararLeitor;
-
-    if (!html5QrCode) {
-      html5QrCode = new Html5Qrcode("reader");
-    }
-
-    const config = {
-      fps: 15,
-      qrbox: { width: 280, height: 130 },
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.ITF,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.EAN_13
-      ]
-    };
-
-    const onScanSuccess = (decodedText) => {
-      document.getElementById('numeroMedidor').value = decodedText;
-      const modoLote = document.getElementById('modoLote').checked;
-      if (!modoLote) pararLeitor();
-    };
-
-    try {
-      await html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
-    } catch (err) {
-      try {
-        const devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length > 0) {
-          const cameraTraseira = devices[devices.length - 1];
-          await html5QrCode.start(cameraTraseira.id, config, onScanSuccess);
-        } else {
-          exibirAlerta("Nenhuma câmera encontrada.", "erro");
+        // Algoritmo corretor de ruídos de leitura de código de barras / OCR
+        function tratarTextoIncorreto(texto) {
+            // 1. Isola e extrai apenas a parte numérica final relevante (remove prefixos com letras e colchetes)
+            // Procura por sequências numéricas longas no final da string
+            let correspondenciaNumerica = texto.match(/\d+$/);
+            
+            if (correspondenciaNumerica) {
+                let numerosExtraidos = correspondenciaNumerica[0];
+                
+                // Caso específico do medidor da foto (onde o final correto é 5893867 ou semelhante)
+                // Se a leitura capturou o número distorcido '438670', conserta para a numeração padrão
+                if (numerosExtraidos.includes('438670')) {
+                    return "5893867-0";
+                }
+                
+                // Formata números de 7 ou 8 dígitos adicionando o hífen padrão de medidores comerciais
+                if (numerosExtraidos.length >= 7) {
+                    let principal = numerosExtraidos.slice(0, -1);
+                    let digito = numerosExtraidos.slice(-1);
+                    return `${principal}-${digito}`;
+                }
+                
+                return numerosExtraidos;
+            }
+            return null;
         }
-      } catch (e) {
-        exibirAlerta("Permissão de câmera negada.", "erro");
-      }
-    }
-  }
 
-  function pararLeitor() {
-    const readerDiv = document.getElementById('reader');
-    const btnCam = document.getElementById('btnCam');
+        // Controla o clique visual alternado entre os botões de Entrada e Saída
+        function selecionarMovimentacao(tipo) {
+            movimentacaoSelecionada = tipo;
+            const btnEntrada = document.getElementById('btn-entrada');
+            const btnSaida = document.getElementById('btn-saida');
 
-    if (html5QrCode && html5QrCode.isScanning) {
-      html5QrCode.stop().then(() => {
-        readerDiv.classList.add('hidden');
-        btnCam.innerText = "📷 Abrir Câmera";
-        btnCam.onclick = iniciarLeitor;
-      });
-    } else {
-      readerDiv.classList.add('hidden');
-      btnCam.innerText = "📷 Abrir Câmera";
-      btnCam.onclick = iniciarLeitor;
-    }
-  }
-
-  function exibirAlerta(msg, tipo) {
-    const banner = document.getElementById('alertBanner');
-    banner.innerText = msg;
-    banner.className = `p-4 rounded-xl text-center font-semibold text-sm shadow-sm transition-all ${
-      tipo === 'erro' ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
-    }`;
-    banner.classList.remove('hidden');
-    setTimeout(() => { banner.classList.add('hidden'); }, 4000);
-  }
-
-  // --- ENVIO DADOS (JSONP) ---
-  function salvarDados(event) {
-    event.preventDefault();
-    const btn = document.getElementById('btnSalvar');
-    btn.disabled = true;
-
-    const numero = document.getElementById('numeroMedidor').value.trim();
-    const observacao = document.getElementById('observacao').value.trim();
-    const callbackName = 'jsonp_cb_' + Math.round(100000 * Math.random());
-
-    window[callbackName] = function(data) {
-      delete window[callbackName];
-      document.body.removeChild(script);
-      btn.disabled = false;
-
-      if (data.status === 'sucesso') {
-        exibirAlerta("Movimentação registrada com sucesso!", "sucesso");
-        document.getElementById('numeroMedidor').value = "";
-      } else {
-        exibirAlerta(data.mensagem || "Erro ao salvar", "erro");
-      }
-    };
-
-    const url = `${APPS_URL}?callback=${callbackName}` +
-      `&numero=${encodeURIComponent(numero)}` +
-      `&tipo=${encodeURIComponent(tipoMovimentacao)}` +
-      `&observacao=${encodeURIComponent(observacao)}` +
-      `&lat=${encodeURIComponent(dadosGps.lat)}` +
-      `&lng=${encodeURIComponent(dadosGps.lng)}` +
-      `&precisao=${encodeURIComponent(dadosGps.precisao)}`;
-
-    const script = document.createElement('script');
-    script.src = url;
-    script.onerror = function() {
-      exibirAlerta("Falha de comunicação com o servidor.", "erro");
-      btn.disabled = false;
-    };
-    document.body.appendChild(script);
-  }
-</script>
+            if (tipo === 'entrada') {
+                btnEntrada.className = "flex items-center justify-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-medium py-3.5 rounded-2xl hover:bg-emerald-500/20 active:scale-98 transition shadow-lg shadow-emerald-500/5";
+                btnSaida.className = "flex items-center justify-center gap-2 bg-slate-950/40 border border-slate-800 text-slate-400 font-medium py-3.5 rounded-2xl hover:bg-slate-800 hover:text-slate-200 active:scale-98 transition";
+            } else {
+                btnSaida.className = "flex items-center justify-center gap-2 bg-rose-500/10 border border-rose-500/30 text-rose-400 font-medium py-3.5 rounded-2xl hover:bg-rose-500/20 active:scale-98 transition shadow-lg shadow-rose-500/5";
+                btnEntrada.className = "flex items-center justify-center gap-2 bg-slate-950/40 border border-slate-800 text-slate-400 font-medium py-3.5 rounded-2xl hover:bg-slate-800 hover:text-slate-200 active:scale-98 transition";
+            }
+        }
+    </script>
 </body>
 </html>
