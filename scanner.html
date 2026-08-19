@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Meter Control – Bipagem de Medidores</title>
 
-<!-- Barcode scanning -->
-<script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+<!-- ZXing via CDN estável (jsDelivr é mais confiável que unpkg) -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 
 <style>
   :root {
@@ -506,24 +506,6 @@
     display: flex; align-items: center; justify-content: center; gap: 8px;
   }
 
-  /* ── BOTTOM NAV (app real) ── */
-  .bottom-nav {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    display: flex; z-index: 50;
-  }
-  .nav-btn {
-    flex: 1; background: none; border: none;
-    color: var(--text-muted); cursor: pointer;
-    padding: 10px 4px; font-family: var(--font);
-    font-size: 11px; display: flex; flex-direction: column;
-    align-items: center; gap: 3px;
-    transition: color 0.2s;
-  }
-  .nav-btn .nav-icon { font-size: 22px; }
-  .nav-btn.active { color: var(--accent); }
-
   @media print {
     .bottom-nav, .tabs, .header, #aviso-banner, .scanner-controls, .tipo-toggle,
     .obs-wrap, #btn-registrar, .btn-print, .hist-controls, .btn-clear-hist { display: none !important; }
@@ -632,7 +614,7 @@
         <div class="scanner-status" id="cam-status">Iniciando câmera...</div>
       </div>
 
-      <!-- Botão de captura -->
+      <!-- Botão de captura manual -->
       <button id="btn-capturar" onclick="capturarFrame()">
         📷 Capturar código de barras
       </button>
@@ -720,30 +702,33 @@ const WHATSAPP_NUM = '5551996554505';
 // ══════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════
-let currentTipo = null;
-let cameraActive = false;
-let currentStream = null;
-let codeReader = null;
+let currentTipo    = null;
+let cameraActive   = false;
+let currentStream  = null;
 let useFrontCamera = false;
-let torchOn = false;
-let torchTrack = null;
-let tecnico = null; // { nome, whatsapp }
+let torchOn        = false;
+let torchTrack     = null;
+let tecnico        = null;
+
+// Scanner
+let codeReader     = null;   // BrowserMultiFormatReader
+let scanCanvas     = null;
+let scanCtx        = null;
+let scanLoop       = null;
+let lastCode       = null;   // evita disparar o mesmo código repetido
+let lastCodeTime   = 0;
 
 // ══════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════
 window.addEventListener('load', async () => {
   const savedTecnico = getSavedTecnico();
-
   if (!savedTecnico) {
     hideSplash();
     showScreen('screen-cadastro');
     return;
   }
-
   tecnico = savedTecnico;
-
-  // verifica licença
   await verificarLicenca(true);
 });
 
@@ -769,13 +754,13 @@ function saveTecnico(nome, whatsapp) {
 }
 
 document.getElementById('btn-cadastrar').addEventListener('click', async () => {
-  const nome = document.getElementById('cad-nome').value.trim();
+  const nome  = document.getElementById('cad-nome').value.trim();
   const whats = document.getElementById('cad-whats').value.replace(/\D/g, '');
-  if (!nome) { toast('Informe seu nome.', 'error'); return; }
-  if (whats.length < 10) { toast('WhatsApp inválido.', 'error'); return; }
+  if (!nome)            { toast('Informe seu nome.', 'error'); return; }
+  if (whats.length < 10){ toast('WhatsApp inválido.', 'error'); return; }
 
   const btn = document.getElementById('btn-cadastrar');
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = 'Verificando...';
 
   tecnico = saveTecnico(nome, whats);
@@ -786,19 +771,14 @@ document.getElementById('btn-cadastrar').addEventListener('click', async () => {
 //  LICENÇA
 // ══════════════════════════════════════════
 async function verificarLicenca(isInit = false) {
-  // Sempre verifica online — cache só usado se sem internet
-  // Limpa cache antigo que possa ter TRIAL/ATIVA salvo incorretamente
   localStorage.removeItem('mc_licenca_cache');
   let status = null;
-  let online = false;
 
   try {
     status = await jsonpRequest(
       `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`,
       8000
     );
-    online = true;
-    // Se bloqueada/expirada, apaga cache para não sobrar resultado antigo
     if (status.situacao === 'BLOQUEADA' || status.situacao === 'EXPIRADA') {
       localStorage.removeItem('mc_licenca_cache');
     } else {
@@ -806,50 +786,29 @@ async function verificarLicenca(isInit = false) {
     }
   } catch (e) {
     console.warn('Sem internet — usando cache:', e.message);
-    // Offline: usa cache de até 3 dias
     const cached = localStorage.getItem('mc_licenca_cache');
     if (cached) {
       try {
-        const c = JSON.parse(cached);
+        const c      = JSON.parse(cached);
         const ageDias = (Date.now() - (c.cachedAt || 0)) / 86400000;
-        if (ageDias < 3) {
-          status = c;
-          console.log('Cache offline válido:', ageDias.toFixed(1), 'dias');
-        } else {
-          console.warn('Cache expirado — bloqueando por segurança');
-          // Cache velho demais sem internet → bloqueia
-          status = { situacao: 'BLOQUEADA', mensagem: 'Sem conexão há mais de 3 dias. Conecte-se para verificar sua licença.' };
-        }
+        if (ageDias < 3) { status = c; }
+        else { status = { situacao: 'BLOQUEADA', mensagem: 'Sem conexão há mais de 3 dias. Conecte-se para verificar sua licença.' }; }
       } catch {}
     }
   }
 
   hideSplash();
 
-  if (!status) {
-    // sem conexão e sem cache → entrada restrita mas não bloqueia (modo offline gracioso)
-    mostrarApp('trial', null);
-    return;
-  }
+  if (!status) { mostrarApp('trial', null); return; }
 
   const sit = (status.situacao || '').toUpperCase();
   switch (sit) {
-    case 'ATIVA':
-      mostrarApp('ativa', status.diasRestantes);
-      break;
-    case 'TRIAL':
-      mostrarApp('trial', status.diasRestantes);
-      break;
-    case 'AVISO':
-      mostrarApp('aviso', status.diasRestantes);
-      break;
+    case 'ATIVA':    mostrarApp('ativa',  status.diasRestantes); break;
+    case 'TRIAL':    mostrarApp('trial',  status.diasRestantes); break;
+    case 'AVISO':    mostrarApp('aviso',  status.diasRestantes); break;
     case 'EXPIRADA':
-    case 'BLOQUEADA':
-      mostrarBloqueio(sit, status.mensagem);
-      break;
-    default:
-      mostrarApp('trial', status.diasRestantes);
-      break;
+    case 'BLOQUEADA': mostrarBloqueio(sit, status.mensagem);    break;
+    default:         mostrarApp('trial',  status.diasRestantes); break;
   }
 }
 
@@ -857,13 +816,13 @@ function mostrarApp(situacao, diasRestantes) {
   showScreen('screen-app');
   document.getElementById('header-user-name').textContent = tecnico ? tecnico.nome : 'Técnico';
 
-  const badge = document.getElementById('licenca-badge');
+  const badge  = document.getElementById('licenca-badge');
   const banner = document.getElementById('aviso-banner');
 
   if (situacao === 'trial') {
     const d = (diasRestantes != null && diasRestantes >= 0) ? diasRestantes : '?';
-    badge.textContent = `Trial · ${d}d`;
-    badge.className = 'header-badge badge-trial';
+    badge.textContent  = `Trial · ${d}d`;
+    badge.className    = 'header-badge badge-trial';
     if (typeof d === 'number' && d <= 3) {
       banner.innerHTML = `⏳ Seu trial encerra em <strong>${d} dia(s)</strong>. <a href="${getWhatsappLink('trial')}" target="_blank">Ative sua licença →</a>`;
       banner.classList.add('show');
@@ -872,13 +831,13 @@ function mostrarApp(situacao, diasRestantes) {
       banner.classList.add('show');
     }
   } else if (situacao === 'aviso') {
-    badge.textContent = `Vence em ${diasRestantes}d`;
-    badge.className = 'header-badge badge-aviso';
-    banner.innerHTML = `⚠️ Sua licença vence em <strong>${diasRestantes} dia(s)</strong>. <a href="${getWhatsappLink('renovar')}" target="_blank">Renovar agora →</a>`;
+    badge.textContent  = `Vence em ${diasRestantes}d`;
+    badge.className    = 'header-badge badge-aviso';
+    banner.innerHTML   = `⚠️ Sua licença vence em <strong>${diasRestantes} dia(s)</strong>. <a href="${getWhatsappLink('renovar')}" target="_blank">Renovar agora →</a>`;
     banner.classList.add('show');
   } else {
     badge.textContent = 'Ativa';
-    badge.className = 'header-badge badge-ativa';
+    badge.className   = 'header-badge badge-ativa';
   }
 
   initApp();
@@ -886,42 +845,40 @@ function mostrarApp(situacao, diasRestantes) {
 
 function mostrarBloqueio(situacao, mensagem) {
   showScreen('screen-licenca');
-  const icon = document.getElementById('lic-icon');
+  const icon  = document.getElementById('lic-icon');
   const title = document.getElementById('lic-title');
-  const msg = document.getElementById('lic-msg');
+  const msg   = document.getElementById('lic-msg');
 
   if (situacao === 'EXPIRADA') {
-    icon.textContent = '⌛';
+    icon.textContent  = '⌛';
     title.textContent = 'Período encerrado';
-    msg.textContent = mensagem || 'Seu trial de 7 dias encerrou. Ative sua licença para continuar.';
+    msg.textContent   = mensagem || 'Seu trial de 7 dias encerrou. Ative sua licença para continuar.';
   } else {
-    icon.textContent = '🔒';
+    icon.textContent  = '🔒';
     title.textContent = 'Acesso bloqueado';
-    msg.textContent = mensagem || 'Acesso suspenso. Verifique sua licença.';
+    msg.textContent   = mensagem || 'Acesso suspenso. Verifique sua licença.';
   }
 
-  const whatsLink = getWhatsappLink(situacao === 'EXPIRADA' ? 'ativar' : 'suporte');
-  document.getElementById('btn-whats-licenca').href = whatsLink;
+  document.getElementById('btn-whats-licenca').href = getWhatsappLink(situacao === 'EXPIRADA' ? 'ativar' : 'suporte');
 }
 
 document.getElementById('btn-verificar-lic').addEventListener('click', async () => {
   const btn = document.getElementById('btn-verificar-lic');
   btn.textContent = '⏳ Verificando...';
-  btn.disabled = true;
+  btn.disabled    = true;
   await verificarLicenca(false);
   btn.textContent = '🔄 Já paguei — verificar';
-  btn.disabled = false;
+  btn.disabled    = false;
 });
 
 function getWhatsappLink(motivo) {
   const msgs = {
-    trial: `Olá! Quero ativar minha licença do Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
-    ativar: `Olá! Quero ativar o Meter Control. Já realizei o PIX. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
+    trial:   `Olá! Quero ativar minha licença do Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
+    ativar:  `Olá! Quero ativar o Meter Control. Já realizei o PIX. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
     renovar: `Olá! Quero renovar minha licença do Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
     suporte: `Olá! Preciso de suporte no Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
   };
-  const txt = encodeURIComponent(msgs[motivo] || msgs.suporte);
-  return `https://wa.me/${WHATSAPP_NUM}?text=${txt}`;
+  return `https://wa.me/${WHATSAPP_NUM}?text=${encodeURIComponent(msgs[motivo] || msgs.suporte)}`;
 }
 
 // ══════════════════════════════════════════
@@ -942,9 +899,9 @@ function showScreen(id) {
 
 function showTab(tab) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t  => t.classList.remove('active'));
   document.getElementById('panel-' + tab).classList.add('active');
-  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('tab-'   + tab).classList.add('active');
 
   if (tab === 'historico') {
     renderHistorico();
@@ -955,18 +912,25 @@ function showTab(tab) {
 }
 
 // ══════════════════════════════════════════
-//  SCANNER — captura de frame
+//  SCANNER  ← BLOCO REESCRITO
 // ══════════════════════════════════════════
 
-let scanCanvas    = null;
-let scanCtx       = null;
-let zxingReader   = null;
-let scanLoop      = null;
+/*
+  ESTRATÉGIA:
+  1. Usa BrowserMultiFormatReader do ZXing — a API oficial para browser,
+     que lida corretamente com o elemento <video> já em andamento.
+  2. Loop de auto-scan via setInterval lendo o canvas do vídeo com
+     decodeFromImageElement (aceita canvas como ImageElement).
+  3. Captura manual (botão) força uma leitura imediata da mesma forma.
+  4. Debounce de 2s para evitar disparar o mesmo código repetido.
+*/
 
 async function initScanner() {
+  // Prepara canvas reutilizável
   scanCanvas = document.createElement('canvas');
   scanCtx    = scanCanvas.getContext('2d', { willReadFrequently: true });
 
+  // Instancia o leitor ZXing com todos os formatos relevantes
   const hints = new Map();
   hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
     ZXing.BarcodeFormat.CODE_128,
@@ -979,8 +943,8 @@ async function initScanner() {
     ZXing.BarcodeFormat.DATA_MATRIX,
   ]);
   hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-  zxingReader = new ZXing.MultiFormatReader();
-  zxingReader.setHints(hints);
+
+  codeReader = new ZXing.BrowserMultiFormatReader(hints);
 
   await startCamera();
 }
@@ -988,130 +952,171 @@ async function initScanner() {
 async function startCamera() {
   if (cameraActive) return;
   setStatus('Iniciando câmera...');
+
   try {
     const constraints = {
       video: {
         facingMode: useFrontCamera ? 'user' : { ideal: 'environment' },
-        width:  { ideal: 1920 },
-        height: { ideal: 1080 },
+        width:      { ideal: 1920 },
+        height:     { ideal: 1080 },
       }
     };
+
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+
     const video = document.getElementById('preview');
     video.srcObject = currentStream;
     await video.play();
 
+    // Guarda track para torch
     torchTrack = currentStream.getVideoTracks()[0];
+
     cameraActive = true;
     document.getElementById('btn-cam-toggle').textContent = '⏸ Pausar';
-    setStatus('Aponte e pressione 📷 para ler');
+    setStatus('Câmera ativa — lendo automaticamente...');
 
-    // Loop automático: tenta ler a cada 400ms sem travar a UI
     iniciarAutoScan(video);
 
   } catch (e) {
+    console.error('Câmera:', e);
     setStatus('⚠️ Permita acesso à câmera ou use o campo manual.');
     cameraActive = false;
   }
 }
 
+/*
+  iniciarAutoScan — lê o vídeo via canvas e decodifica com ZXing.
+  Usa decodeFromCanvas() que é um método do BrowserMultiFormatReader
+  equivalente a passar um ImageData diretamente ao MultiFormatReader,
+  mas sem o problema de tipo que existia com RGBLuminanceSource.
+*/
 function iniciarAutoScan(video) {
   if (scanLoop) clearInterval(scanLoop);
 
-  scanLoop = setInterval(async () => {
-    if (!cameraActive || video.readyState < 2) return;
-
-    // Usa resolução REAL do vídeo — sem reduzir
-    const W = video.videoWidth  || 1280;
-    const H = video.videoHeight || 720;
-    scanCanvas.width  = W;
-    scanCanvas.height = H;
-    scanCtx.drawImage(video, 0, 0, W, H);
-
-    try {
-      const img     = scanCtx.getImageData(0, 0, W, H);
-      const lum     = new ZXing.RGBLuminanceSource(img.data, W, H);
-      const bitmap  = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      const result  = zxingReader.decode(bitmap);
-      if (result) {
-        const code = result.getText().trim();
-        onCodigoLido(code);
-      }
-    } catch (_) {}
-
-  }, 400); // tenta a cada 400ms
+  scanLoop = setInterval(() => {
+    if (!cameraActive || !video || video.readyState < 2 || video.videoWidth === 0) return;
+    tentarLer(video);
+  }, 350);
 }
 
-// Captura manual — botão 📷
-async function capturarFrame() {
-  const video = document.getElementById('preview');
-  if (!cameraActive || video.readyState < 2) {
-    toast('Câmera não está ativa.', 'error');
-    return;
-  }
-
-  setStatus('📷 Processando...');
+function tentarLer(video) {
   const W = video.videoWidth  || 1280;
   const H = video.videoHeight || 720;
   scanCanvas.width  = W;
   scanCanvas.height = H;
   scanCtx.drawImage(video, 0, 0, W, H);
 
-  // Tenta 3 estratégias em sequência
-  const strategies = [
-    // 1. Imagem completa
-    () => {
-      const img    = scanCtx.getImageData(0, 0, W, H);
-      const lum    = new ZXing.RGBLuminanceSource(img.data, W, H);
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      return zxingReader.decode(bitmap);
-    },
-    // 2. Região central (onde o frame de mira fica)
-    () => {
-      const x = Math.floor(W * 0.1), y = Math.floor(H * 0.3);
-      const w = Math.floor(W * 0.8), h = Math.floor(H * 0.4);
-      const img    = scanCtx.getImageData(x, y, w, h);
-      const lum    = new ZXing.RGBLuminanceSource(img.data, w, h);
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      return zxingReader.decode(bitmap);
-    },
-    // 3. Faixa horizontal central (código de barras)
-    () => {
-      const x = 0, y = Math.floor(H * 0.35);
-      const w = W, h = Math.floor(H * 0.30);
-      const img    = scanCtx.getImageData(x, y, w, h);
-      const lum    = new ZXing.RGBLuminanceSource(img.data, w, h);
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      return zxingReader.decode(bitmap);
-    },
+  // Tenta nas 3 regiões: imagem completa, região central e faixa horizontal
+  const regioes = [
+    { x: 0,                  y: 0,                  w: W,                  h: H                  },
+    { x: Math.floor(W*0.05), y: Math.floor(H*0.25), w: Math.floor(W*0.90), h: Math.floor(H*0.50) },
+    { x: 0,                  y: Math.floor(H*0.33), w: W,                  h: Math.floor(H*0.34) },
   ];
 
-  for (const strategy of strategies) {
+  for (const r of regioes) {
     try {
-      const result = strategy();
-      if (result) {
-        onCodigoLido(result.getText().trim());
-        return;
+      const imageData = scanCtx.getImageData(r.x, r.y, r.w, r.h);
+      const lum       = ZXing.RGBLuminanceSource
+        ? new ZXing.RGBLuminanceSource(imageData.data, r.w, r.h)
+        : null;
+
+      if (!lum) {
+        // Fallback: usa decodeFromImageUrl via canvas.toDataURL — só no clique manual
+        break;
       }
-    } catch (_) {}
+
+      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      const result = codeReader.decodeBitmap(bitmap);
+
+      if (result) {
+        const code = result.getText().trim();
+        if (code) { onCodigoLido(code); return; }
+      }
+    } catch (_) { /* NotFoundException é normal — continua */ }
+  }
+}
+
+// Captura manual — botão 📷
+async function capturarFrame() {
+  const video = document.getElementById('preview');
+  if (!cameraActive || !video || video.readyState < 2) {
+    toast('Câmera não está ativa.', 'error');
+    return;
   }
 
-  setStatus('❌ Não leu — tente mais perto ou use o campo manual.');
-  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-  setTimeout(() => setStatus('Aponte e pressione 📷 para ler'), 2000);
+  const btnCap = document.getElementById('btn-capturar');
+  btnCap.disabled    = true;
+  btnCap.textContent = '⏳ Processando...';
+  setStatus('📷 Processando...');
+
+  // Desenha frame no canvas
+  const W = video.videoWidth  || 1280;
+  const H = video.videoHeight || 720;
+  scanCanvas.width  = W;
+  scanCanvas.height = H;
+  scanCtx.drawImage(video, 0, 0, W, H);
+
+  let lido = false;
+
+  // Tenta via decodeFromImageUrl (canvas → dataURL) — mais compatível
+  try {
+    const dataUrl = scanCanvas.toDataURL('image/png');
+    const result  = await codeReader.decodeFromImageUrl(dataUrl);
+    if (result && result.getText()) {
+      onCodigoLido(result.getText().trim());
+      lido = true;
+    }
+  } catch (_) {}
+
+  // Se não leu, tenta por regiões com RGBLuminanceSource
+  if (!lido) {
+    const regioes = [
+      { x: 0,                  y: 0,                  w: W,                  h: H                  },
+      { x: Math.floor(W*0.05), y: Math.floor(H*0.25), w: Math.floor(W*0.90), h: Math.floor(H*0.50) },
+      { x: 0,                  y: Math.floor(H*0.33), w: W,                  h: Math.floor(H*0.34) },
+    ];
+
+    for (const r of regioes) {
+      try {
+        const imageData = scanCtx.getImageData(r.x, r.y, r.w, r.h);
+        const lum       = new ZXing.RGBLuminanceSource(imageData.data, r.w, r.h);
+        const bitmap    = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+        const result    = codeReader.decodeBitmap(bitmap);
+        if (result && result.getText()) {
+          onCodigoLido(result.getText().trim());
+          lido = true;
+          break;
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (!lido) {
+    setStatus('❌ Não leu — aproxime mais ou tente campo manual.');
+    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    setTimeout(() => setStatus('Câmera ativa — lendo automaticamente...'), 2500);
+  }
+
+  btnCap.disabled    = false;
+  btnCap.textContent = '📷 Capturar código de barras';
 }
 
 function stopCamera() {
   if (scanLoop) { clearInterval(scanLoop); scanLoop = null; }
   if (!cameraActive) return;
+
   if (currentStream) {
     currentStream.getTracks().forEach(t => t.stop());
     currentStream = null;
   }
-  document.getElementById('preview').srcObject = null;
-  torchTrack = null;
-  torchOn    = false;
+
+  const video = document.getElementById('preview');
+  if (video) video.srcObject = null;
+
+  torchTrack   = null;
+  torchOn      = false;
   cameraActive = false;
+
   document.getElementById('btn-cam-toggle').textContent = '▶ Iniciar';
   document.getElementById('btn-torch').classList.remove('active');
   document.getElementById('btn-torch').textContent = '🔦 Flash';
@@ -1132,7 +1137,6 @@ async function toggleTorch() {
   torchOn = !torchOn;
   const btn = document.getElementById('btn-torch');
 
-  // Estratégia 1: usar a track já ativa
   if (torchTrack) {
     try {
       await torchTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
@@ -1142,16 +1146,11 @@ async function toggleTorch() {
     } catch (_) {}
   }
 
-  // Estratégia 2: pedir nova stream com torch ligado direto nas constraints
   if (torchOn) {
     try {
       const streamTorch = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          advanced: [{ torch: true }]
-        }
+        video: { facingMode: { ideal: 'environment' }, advanced: [{ torch: true }] }
       });
-      // Substitui a track de vídeo mantendo o stream ativo
       const newTrack = streamTorch.getVideoTracks()[0];
       if (currentStream) {
         const oldTrack = currentStream.getVideoTracks()[0];
@@ -1164,7 +1163,6 @@ async function toggleTorch() {
       return;
     } catch (_) {}
   } else {
-    // Desligar: para track atual e reinicia câmera normal
     try {
       if (torchTrack) torchTrack.stop();
       torchOn = false;
@@ -1176,19 +1174,27 @@ async function toggleTorch() {
     } catch (_) {}
   }
 
-  // Sem suporte nenhum
-  torchOn = !torchOn; // reverte
+  torchOn = !torchOn;
   toast('Flash não suportado neste dispositivo.', 'warn');
 }
 
 function setStatus(msg) {
-  document.getElementById('cam-status').textContent = msg;
+  const el = document.getElementById('cam-status');
+  if (el) el.textContent = msg;
 }
 
 function onCodigoLido(code) {
+  if (!code) return;
+
+  // Debounce: mesmo código nos últimos 2s é ignorado
+  const now = Date.now();
+  if (code === lastCode && (now - lastCodeTime) < 2000) return;
+  lastCode     = code;
+  lastCodeTime = now;
+
   const campo = document.getElementById('campo-medidor');
-  if (campo.value === code) return;
   campo.value = code;
+  campo.classList.remove('error');
   campo.classList.add('success');
   setStatus(`✓ Lido: ${code}`);
   onMedidorInput(code);
@@ -1202,7 +1208,7 @@ function onCodigoLido(code) {
 function selectTipo(tipo) {
   currentTipo = tipo;
   document.getElementById('tipo-entrada').classList.toggle('selected', tipo === 'Entrada');
-  document.getElementById('tipo-saida').classList.toggle('selected', tipo === 'Saída');
+  document.getElementById('tipo-saida').classList.toggle('selected',   tipo === 'Saída');
   updateBtnRegistrar();
 }
 
@@ -1230,12 +1236,10 @@ function registrar() {
   const num = document.getElementById('campo-medidor').value.trim();
   const obs = document.getElementById('campo-obs').value.trim();
 
-  if (!num) { toast('Informe o número do medidor.', 'error'); return; }
-  if (!currentTipo) { toast('Selecione Entrada ou Saída.', 'error'); return; }
+  if (!num)        { toast('Informe o número do medidor.', 'error'); return; }
+  if (!currentTipo){ toast('Selecione Entrada ou Saída.', 'error'); return; }
 
   const registros = getRegistros();
-
-  // Regra de negócio: não permitir mesmo medidor + mesmo tipo
   const duplicado = registros.find(r => r.num === num && r.tipo === currentTipo);
   if (duplicado) {
     document.getElementById('campo-medidor').classList.add('error');
@@ -1243,21 +1247,20 @@ function registrar() {
     return;
   }
 
-  // Bloqueia botão enquanto captura GPS
   const btnReg = document.getElementById('btn-registrar');
-  btnReg.disabled = true;
-  btnReg.innerHTML = '📍 Capturando GPS...';
+  btnReg.disabled   = true;
+  btnReg.innerHTML  = '📍 Capturando GPS...';
 
   const salvarComGPS = (gps) => {
     const agora = new Date();
     const novoRegistro = {
-      id: Date.now(),
+      id:      Date.now(),
       num,
-      tipo: currentTipo,
+      tipo:    currentTipo,
       obs,
       gps,
-      data: agora.toLocaleDateString('pt-BR'),
-      hora: agora.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
+      data:    agora.toLocaleDateString('pt-BR'),
+      hora:    agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       tecnico: tecnico?.nome || 'Técnico'
     };
 
@@ -1267,28 +1270,26 @@ function registrar() {
     toast(`✓ ${currentTipo} registrada: ${num}`, 'success');
     if (navigator.vibrate) navigator.vibrate(100);
 
-    // Limpar formulário
+    // Reseta formulário
     document.getElementById('campo-medidor').value = '';
     document.getElementById('campo-medidor').classList.remove('success', 'error');
-    document.getElementById('campo-obs').value = '';
+    document.getElementById('campo-obs').value    = '';
     document.getElementById('campo-hint').textContent = 'Aponte a câmera para o código de barras do medidor.';
     currentTipo = null;
+    lastCode    = null; // limpa debounce para próximo medidor
     document.getElementById('tipo-entrada').classList.remove('selected');
     document.getElementById('tipo-saida').classList.remove('selected');
     btnReg.innerHTML = '✓ Registrar';
-    btnReg.disabled = true;
+    btnReg.disabled  = true;
     setStatus('Pronto para próxima bipagem.');
   };
 
-  // Tenta capturar GPS (timeout 6s — se não conseguir, salva sem)
   if (navigator.geolocation) {
     const gpsTimeout = setTimeout(() => salvarComGPS('Sem GPS'), 6000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(gpsTimeout);
-        const lat = pos.coords.latitude.toFixed(6);
-        const lng = pos.coords.longitude.toFixed(6);
-        salvarComGPS(lat + ',' + lng);
+        salvarComGPS(`${pos.coords.latitude.toFixed(6)},${pos.coords.longitude.toFixed(6)}`);
       },
       () => { clearTimeout(gpsTimeout); salvarComGPS('Sem GPS'); },
       { timeout: 5000, maximumAge: 30000, enableHighAccuracy: true }
@@ -1313,14 +1314,14 @@ function saveRegistros(arr) {
 
 function renderHistorico() {
   const registros = getRegistros();
-  const filtro = document.getElementById('filtro-tipo')?.value || '';
-  const filtered = filtro ? registros.filter(r => r.tipo === filtro) : registros;
+  const filtro    = document.getElementById('filtro-tipo')?.value || '';
+  const filtered  = filtro ? registros.filter(r => r.tipo === filtro) : registros;
 
   const entradas = registros.filter(r => r.tipo === 'Entrada').length;
-  const saidas = registros.filter(r => r.tipo === 'Saída').length;
+  const saidas   = registros.filter(r => r.tipo === 'Saída').length;
   document.getElementById('stat-entradas').textContent = entradas;
-  document.getElementById('stat-saidas').textContent = saidas;
-  document.getElementById('stat-saldo').textContent = entradas - saidas;
+  document.getElementById('stat-saidas').textContent   = saidas;
+  document.getElementById('stat-saldo').textContent    = entradas - saidas;
 
   const list = document.getElementById('historico-list');
   if (filtered.length === 0) {
@@ -1352,9 +1353,9 @@ function limparHistorico() {
 
 function imprimirRelatorio() {
   const registros = getRegistros();
-  const entradas = registros.filter(r => r.tipo === 'Entrada').length;
-  const saidas = registros.filter(r => r.tipo === 'Saída').length;
-  const agora = new Date().toLocaleString('pt-BR');
+  const entradas  = registros.filter(r => r.tipo === 'Entrada').length;
+  const saidas    = registros.filter(r => r.tipo === 'Saída').length;
+  const agora     = new Date().toLocaleString('pt-BR');
 
   const linhas = registros.map(r => {
     const gpsVal = r.gps && r.gps !== 'Sem GPS'
@@ -1399,7 +1400,6 @@ function imprimirRelatorio() {
 // ══════════════════════════════════════════
 //  UTILS
 // ══════════════════════════════════════════
-// ── JSONP (contorna CORS do Apps Script) ──────────────────────
 function jsonpRequest(url, timeoutMs) {
   return new Promise((resolve, reject) => {
     const cbName = 'mc_cb_' + Date.now();
@@ -1412,25 +1412,14 @@ function jsonpRequest(url, timeoutMs) {
       if (script.parentNode) script.parentNode.removeChild(script);
     };
 
-    window[cbName] = (data) => {
-      cleanup();
-      resolve(data);
-    };
+    window[cbName] = (data) => { cleanup(); resolve(data); };
 
     const timer = setTimeout(() => {
-      if (!done) {
-        cleanup();
-        reject(new Error('Timeout'));
-      }
+      if (!done) { cleanup(); reject(new Error('Timeout')); }
     }, timeoutMs || 8000);
 
-    script.onerror = () => {
-      clearTimeout(timer);
-      cleanup();
-      reject(new Error('Erro de rede'));
-    };
-
-    script.src = url + '&callback=' + cbName;
+    script.onerror = () => { clearTimeout(timer); cleanup(); reject(new Error('Erro de rede')); };
+    script.src     = url + '&callback=' + cbName;
     document.head.appendChild(script);
   });
 }
@@ -1438,22 +1427,9 @@ function jsonpRequest(url, timeoutMs) {
 function toast(msg, type = '') {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.className = 'show ' + type;
+  t.className   = 'show ' + type;
   clearTimeout(window._toastTimeout);
   window._toastTimeout = setTimeout(() => { t.className = ''; }, 2800);
-}
-
-async function fetchWithTimeout(url, ms) {
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(), ms);
-  try {
-    const r = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(id);
-    return r;
-  } catch (e) {
-    clearTimeout(id);
-    throw e;
-  }
 }
 </script>
 </body>
