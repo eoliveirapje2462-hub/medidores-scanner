@@ -1,1436 +1,220 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<title>Meter Control – Bipagem de Medidores</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registro de Medidores</title>
+  <!-- Biblioteca para leitura de Código de Barras / QR Code -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: #f4f6f8; color: #333; padding: 15px; }
+    .container { max-width: 480px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    h2 { font-size: 1.25rem; color: #1e293b; margin-bottom: 16px; text-align: center; }
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 6px; }
+    input, select, textarea { width: 100%; padding: 10px 12px; font-size: 1rem; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; background: #fff; }
+    input:focus, select:focus, textarea:focus { border-color: #2563eb; ring: 2px #93c5fd; }
+    
+    .scanner-box { background: #1e293b; border-radius: 8px; overflow: hidden; margin-bottom: 14px; position: relative; }
+    #reader { width: 100%; min-height: 200px; }
+    
+    .btn { display: block; width: 100%; padding: 12px; font-size: 1rem; font-weight: 600; text-align: center; color: #fff; background-color: #2563eb; border: none; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+    .btn:hover { background-color: #1d4ed8; }
+    .btn-secondary { background-color: #64748b; margin-bottom: 10px; }
+    .btn-secondary:hover { background-color: #475569; }
+    .btn:disabled { background-color: #94a3b8; cursor: not-allowed; }
 
-<!-- ZXing via CDN estável (jsDelivr é mais confiável que unpkg) -->
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
-
-<style>
-  :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #242736;
-    --border: #2e3347;
-    --accent: #3b82f6;
-    --accent-dark: #2563eb;
-    --accent-glow: rgba(59,130,246,0.18);
-    --green: #22c55e;
-    --green-glow: rgba(34,197,94,0.15);
-    --yellow: #f59e0b;
-    --yellow-glow: rgba(245,158,11,0.15);
-    --red: #ef4444;
-    --red-glow: rgba(239,68,68,0.15);
-    --text: #e2e8f0;
-    --text-muted: #64748b;
-    --text-dim: #94a3b8;
-    --radius: 12px;
-    --radius-sm: 8px;
-    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: var(--font);
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* ── SPLASH / LOADING ── */
-  #splash {
-    position: fixed; inset: 0;
-    background: var(--bg);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 20px; z-index: 1000;
-    transition: opacity 0.4s;
-  }
-  #splash.hidden { opacity: 0; pointer-events: none; }
-
-  .splash-logo {
-    width: 72px; height: 72px;
-    background: var(--accent);
-    border-radius: 18px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 36px;
-    box-shadow: 0 0 40px var(--accent-glow);
-  }
-  .splash-title { font-size: 22px; font-weight: 700; color: var(--text); }
-  .splash-sub { font-size: 13px; color: var(--text-muted); }
-  .spinner {
-    width: 28px; height: 28px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-top: 8px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── SCREENS ── */
-  .screen {
-    display: none;
-    min-height: 100vh;
-    padding: 0 0 80px;
-    animation: fadeIn 0.3s ease;
-  }
-  .screen.active { display: block; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-
-  /* ── CADASTRO ── */
-  #screen-cadastro {
-    display: none;
-    min-height: 100vh;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    flex-direction: column;
-    gap: 0;
-  }
-  #screen-cadastro.active {
-    display: flex;
-  }
-
-  .cadastro-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 32px 24px;
-    width: 100%;
-    max-width: 400px;
-  }
-  .cadastro-logo {
-    display: flex; align-items: center; gap: 12px;
-    margin-bottom: 28px;
-  }
-  .cadastro-logo-icon {
-    width: 44px; height: 44px;
-    background: var(--accent);
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px;
-  }
-  .cadastro-logo-text { font-size: 18px; font-weight: 700; }
-  .cadastro-logo-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
-
-  .cadastro-card h2 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
-  .cadastro-card p { font-size: 13px; color: var(--text-dim); margin-bottom: 24px; line-height: 1.5; }
-
-  .field-group { display: flex; flex-direction: column; gap: 14px; }
-  .field label { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; display: block; }
-  .field input {
-    width: 100%;
-    background: var(--bg);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-size: 15px;
-    padding: 12px 14px;
-    outline: none;
-    transition: border-color 0.2s;
-    font-family: var(--font);
-  }
-  .field input:focus { border-color: var(--accent); }
-  .field input::placeholder { color: var(--text-muted); }
-
-  .btn-primary {
-    width: 100%; margin-top: 20px;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: var(--radius-sm);
-    font-size: 15px; font-weight: 600;
-    padding: 14px;
-    cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
-    font-family: var(--font);
-  }
-  .btn-primary:active { background: var(--accent-dark); transform: scale(0.98); }
-  .btn-primary:disabled { opacity: 0.5; pointer-events: none; }
-
-  /* ── LICENÇA / BLOQUEIO ── */
-  #screen-licenca {
-    display: none;
-    min-height: 100vh;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    flex-direction: column;
-  }
-  #screen-licenca.active { display: flex; }
-
-  .licenca-card {
-    background: var(--surface);
-    border: 1.5px solid var(--border);
-    border-radius: 20px;
-    padding: 32px 24px;
-    width: 100%;
-    max-width: 400px;
-    text-align: center;
-  }
-  .licenca-icon { font-size: 48px; margin-bottom: 16px; }
-  .licenca-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-  .licenca-msg { font-size: 14px; color: var(--text-dim); line-height: 1.6; margin-bottom: 24px; }
-
-  .pix-box {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 16px;
-    margin-bottom: 20px;
-  }
-  .pix-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
-  .pix-key {
-    font-size: 16px; font-weight: 700; color: var(--accent);
-    word-break: break-all; margin-bottom: 4px;
-  }
-  .pix-desc { font-size: 12px; color: var(--text-dim); }
-
-  .btn-whatsapp {
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    width: 100%;
-    background: #25d366;
-    color: #fff;
-    border: none;
-    border-radius: var(--radius-sm);
-    font-size: 15px; font-weight: 600;
-    padding: 14px;
-    cursor: pointer;
-    text-decoration: none;
-    font-family: var(--font);
-    margin-bottom: 12px;
-  }
-  .btn-secondary {
-    width: 100%;
-    background: transparent;
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 14px;
-    padding: 12px;
-    cursor: pointer;
-    font-family: var(--font);
-  }
-
-  /* ── AVISO DE VENCIMENTO (banner no topo) ── */
-  #aviso-banner {
-    display: none;
-    background: linear-gradient(135deg, #92400e, #78350f);
-    border-bottom: 1px solid #b45309;
-    padding: 12px 16px;
-    font-size: 13px;
-    color: #fef3c7;
-    line-height: 1.4;
-    text-align: center;
-  }
-  #aviso-banner.show { display: block; }
-  #aviso-banner strong { color: #fde68a; }
-  #aviso-banner a { color: #fde68a; font-weight: 600; }
-
-  /* ── HEADER ── */
-  .header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 14px 16px 10px;
-    position: sticky; top: 0; z-index: 50;
-  }
-  .header-top {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 4px;
-  }
-  .header-logo { display: flex; align-items: center; gap: 10px; }
-  .header-logo-icon {
-    width: 32px; height: 32px;
-    background: var(--accent);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 16px;
-  }
-  .header-logo-name { font-size: 15px; font-weight: 700; }
-  .header-user { font-size: 12px; color: var(--text-muted); }
-  .header-badge {
-    font-size: 10px; font-weight: 600; padding: 3px 8px;
-    border-radius: 20px; text-transform: uppercase; letter-spacing: 0.05em;
-  }
-  .badge-trial { background: var(--yellow-glow); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
-  .badge-ativa { background: var(--green-glow); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
-  .badge-aviso { background: var(--yellow-glow); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
-
-  /* ── TABS ── */
-  .tabs {
-    display: flex;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-    position: sticky; top: 62px; z-index: 40;
-  }
-  .tab {
-    flex: 1; padding: 12px 8px;
-    background: none; border: none;
-    font-family: var(--font); font-size: 13px; font-weight: 500;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
-  }
-  .tab .tab-icon { font-size: 18px; }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-  /* ── CONTENT PANELS ── */
-  .panel { display: none; padding: 16px; }
-  .panel.active { display: block; }
-
-  /* ── CAMERA / SCANNER ── */
-  .scanner-wrap {
-    position: relative;
-    background: #000;
-    border-radius: var(--radius);
-    overflow: hidden;
-    aspect-ratio: 16/9;
-    margin-bottom: 16px;
-    border: 1px solid var(--border);
-  }
-  #preview {
-    width: 100%; height: 100%;
-    object-fit: cover; display: block;
-  }
-  .scanner-overlay {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: none;
-  }
-  .scanner-frame {
-    width: 260px; height: 120px;
-    border: 2px solid var(--accent);
-    border-radius: 8px;
-    box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
-  }
-  .scanner-line {
-    position: absolute;
-    top: 50%;
-    left: calc(50% - 130px);
-    width: 260px;
-    height: 2px;
-    background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
-    animation: scan 2s ease-in-out infinite;
-  }
-  @keyframes scan {
-    0%,100% { transform: translateY(-25px); opacity: 0.6; }
-    50% { transform: translateY(25px); opacity: 1; }
-  }
-  .scanner-status {
-    position: absolute; bottom: 10px; left: 0; right: 0;
-    text-align: center; font-size: 12px; color: #fff;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-  }
-
-  .scanner-controls { display: flex; gap: 10px; margin-bottom: 16px; }
-  .btn-cam {
-    flex: 1; background: var(--surface); border: 1.5px solid var(--border);
-    color: var(--text); border-radius: var(--radius-sm);
-    font-size: 14px; font-weight: 500;
-    padding: 11px 8px; cursor: pointer; font-family: var(--font);
-    transition: border-color 0.2s;
-  }
-  .btn-cam.active { border-color: var(--accent); color: var(--accent); }
-
-  #btn-capturar {
-    width: 100%;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: var(--radius-sm);
-    font-size: 18px;
-    font-weight: 700;
-    padding: 16px;
-    cursor: pointer;
-    font-family: var(--font);
-    margin-bottom: 10px;
-    letter-spacing: 0.02em;
-    transition: background 0.15s, transform 0.1s;
-    box-shadow: 0 4px 16px rgba(59,130,246,0.35);
-  }
-  #btn-capturar:active { background: var(--accent-dark); transform: scale(0.97); }
-  #btn-capturar:disabled { opacity: 0.4; pointer-events: none; }
-
-  #btn-torch.active { border-color: var(--yellow); color: var(--yellow); background: var(--yellow-glow); }
-  .btn-cam:disabled { opacity: 0.4; pointer-events: none; }
-
-  /* ── RESULTADO SCAN ── */
-  #resultado-container {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
-    margin-bottom: 16px;
-  }
-  .resultado-header {
-    padding: 12px 14px;
-    border-bottom: 1px solid var(--border);
-    font-size: 12px; font-weight: 600;
-    color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
-  }
-  .resultado-body { padding: 12px 14px; }
-  #campo-medidor {
-    width: 100%; background: var(--bg); border: 1.5px solid var(--border);
-    border-radius: var(--radius-sm); color: var(--text);
-    font-size: 18px; font-weight: 600; font-family: 'Courier New', monospace;
-    padding: 12px 14px; outline: none; transition: border-color 0.2s;
-    letter-spacing: 0.1em;
-  }
-  #campo-medidor:focus { border-color: var(--accent); }
-  #campo-medidor.success { border-color: var(--green); }
-  #campo-medidor.error { border-color: var(--red); }
-  .campo-hint { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
-
-  /* ── TIPO DE MOVIMENTAÇÃO ── */
-  .tipo-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
-  .tipo-btn {
-    flex: 1; padding: 14px 8px;
-    background: var(--surface); border: 1.5px solid var(--border);
-    border-radius: var(--radius-sm); color: var(--text-dim);
-    font-size: 14px; font-weight: 600; cursor: pointer;
-    font-family: var(--font);
-    transition: all 0.2s;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-  }
-  .tipo-btn .tipo-icon { font-size: 22px; }
-  .tipo-btn.entrada.selected { background: var(--green-glow); border-color: var(--green); color: var(--green); }
-  .tipo-btn.saida.selected { background: var(--red-glow); border-color: var(--red); color: var(--red); }
-
-  /* ── OBS ── */
-  .obs-wrap { margin-bottom: 16px; }
-  .obs-label { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; display: block; }
-  #campo-obs {
-    width: 100%; background: var(--surface); border: 1.5px solid var(--border);
-    border-radius: var(--radius-sm); color: var(--text);
-    font-size: 14px; padding: 10px 12px; outline: none;
-    font-family: var(--font); resize: none; transition: border-color 0.2s;
-    min-height: 64px;
-  }
-  #campo-obs:focus { border-color: var(--accent); }
-
-  /* ── REGISTRAR BTN ── */
-  #btn-registrar {
-    width: 100%;
-    background: var(--accent); color: #fff;
-    border: none; border-radius: var(--radius-sm);
-    font-size: 16px; font-weight: 700;
-    padding: 16px;
-    cursor: pointer; font-family: var(--font);
-    transition: background 0.2s, transform 0.1s;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-  }
-  #btn-registrar:active { background: var(--accent-dark); transform: scale(0.98); }
-  #btn-registrar:disabled { opacity: 0.5; pointer-events: none; }
-
-  /* ── TOAST ── */
-  #toast {
-    position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%);
-    background: var(--surface2); color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 24px; padding: 12px 20px;
-    font-size: 14px; font-weight: 500;
-    z-index: 200; white-space: nowrap;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
-    opacity: 0; pointer-events: none;
-    transition: opacity 0.25s;
-  }
-  #toast.show { opacity: 1; }
-  #toast.success { border-color: var(--green); color: var(--green); }
-  #toast.error { border-color: var(--red); color: var(--red); }
-  #toast.warn { border-color: var(--yellow); color: var(--yellow); }
-
-  /* ── HISTÓRICO ── */
-  .historico-stats {
-    display: grid; grid-template-columns: repeat(3,1fr);
-    gap: 10px; margin-bottom: 16px;
-  }
-  .stat-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 12px 10px; text-align: center;
-  }
-  .stat-val { font-size: 22px; font-weight: 800; }
-  .stat-val.green { color: var(--green); }
-  .stat-val.red { color: var(--red); }
-  .stat-val.blue { color: var(--accent); }
-  .stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-
-  .historico-list { display: flex; flex-direction: column; gap: 8px; }
-  .hist-item {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 12px 14px;
-    display: flex; align-items: center; gap: 12px;
-  }
-  .hist-tipo-badge {
-    width: 36px; height: 36px; border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 16px; flex-shrink: 0;
-  }
-  .hist-tipo-badge.entrada { background: var(--green-glow); }
-  .hist-tipo-badge.saida { background: var(--red-glow); }
-  .hist-info { flex: 1; min-width: 0; }
-  .hist-num { font-size: 14px; font-weight: 700; font-family: 'Courier New', monospace; letter-spacing: 0.05em; }
-  .hist-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-  .hist-obs { font-size: 11px; color: var(--text-dim); margin-top: 2px; font-style: italic; }
-  .hist-empty { text-align: center; padding: 40px 16px; color: var(--text-muted); font-size: 14px; }
-
-  .hist-controls { display: flex; gap: 8px; margin-bottom: 14px; }
-  .hist-filter {
-    flex: 1; background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); color: var(--text);
-    font-size: 13px; padding: 9px 12px;
-    font-family: var(--font); outline: none; cursor: pointer;
-  }
-  .btn-clear-hist {
-    background: var(--red-glow); border: 1px solid rgba(239,68,68,0.3);
-    color: var(--red); border-radius: var(--radius-sm);
-    font-size: 13px; padding: 9px 14px; cursor: pointer;
-    font-family: var(--font);
-  }
-
-  /* ── IMPRIMIR ── */
-  .btn-print {
-    width: 100%; background: var(--surface2); border: 1px solid var(--border);
-    color: var(--text); border-radius: var(--radius-sm);
-    font-size: 14px; padding: 12px; cursor: pointer;
-    font-family: var(--font); margin-bottom: 14px;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-  }
-
-  @media print {
-    .bottom-nav, .tabs, .header, #aviso-banner, .scanner-controls, .tipo-toggle,
-    .obs-wrap, #btn-registrar, .btn-print, .hist-controls, .btn-clear-hist { display: none !important; }
-    body { background: #fff; color: #000; }
-    .screen { padding-bottom: 0; }
-  }
-</style>
+    .status-badge { font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-top: 4px; }
+    .status-gps { background: #e0f2fe; color: #0369a1; }
+  </style>
 </head>
 <body>
 
-<!-- SPLASH -->
-<div id="splash">
-  <div class="splash-logo">⚡</div>
-  <div class="splash-title">Meter Control</div>
-  <div class="splash-sub">Gestão de Medidores de Energia</div>
-  <div class="spinner"></div>
-</div>
+<div class="container">
+  <h2>Registro de Medidores</h2>
 
-<!-- AVISO DE VENCIMENTO (banner) -->
-<div id="aviso-banner"></div>
+  <button type="button" class="btn btn-secondary" id="btnCam" onclick="iniciarLeitor()">📷 Abrir Leitor de Código</button>
 
-<!-- TELA: CADASTRO -->
-<div id="screen-cadastro" class="screen">
-  <div class="cadastro-card">
-    <div class="cadastro-logo">
-      <div class="cadastro-logo-icon">⚡</div>
-      <div>
-        <div class="cadastro-logo-text">Meter Control</div>
-        <div class="cadastro-logo-sub">Gestão de Medidores · Grupo Setup</div>
-      </div>
-    </div>
-    <h2>Bem-vindo! 👋</h2>
-    <p>Informe seus dados para começar. Você só precisará fazer isso uma vez neste dispositivo.</p>
-    <div class="field-group">
-      <div class="field">
-        <label>Seu nome completo</label>
-        <input type="text" id="cad-nome" placeholder="Ex: João Silva" autocomplete="name" />
-      </div>
-      <div class="field">
-        <label>WhatsApp (com DDD)</label>
-        <input type="tel" id="cad-whats" placeholder="Ex: 51999999999" autocomplete="tel" inputmode="tel" />
-      </div>
-    </div>
-    <button class="btn-primary" id="btn-cadastrar">Começar →</button>
-    <p style="font-size:11px;color:var(--text-muted);margin-top:16px;text-align:center;">
-      Ao continuar você recebe 7 dias grátis de avaliação.
-    </p>
-  </div>
-</div>
-
-<!-- TELA: LICENÇA EXPIRADA / BLOQUEADA -->
-<div id="screen-licenca" class="screen">
-  <div class="licenca-card">
-    <div class="licenca-icon" id="lic-icon">🔒</div>
-    <div class="licenca-title" id="lic-title">Acesso bloqueado</div>
-    <div class="licenca-msg" id="lic-msg">
-      Seu período de avaliação encerrou. Para continuar usando o Meter Control, ative sua licença.
-    </div>
-    <div class="pix-box">
-      <div class="pix-label">PIX — Chave CPF</div>
-      <div class="pix-key">62676393049</div>
-      <div class="pix-desc">R$97 ativação · R$47 semestral</div>
-    </div>
-    <a id="btn-whats-licenca" class="btn-whatsapp" href="#" target="_blank">
-      📲 Ativar via WhatsApp
-    </a>
-    <button class="btn-secondary" id="btn-verificar-lic">🔄 Já paguei — verificar</button>
-  </div>
-</div>
-
-<!-- APP PRINCIPAL -->
-<div id="screen-app" class="screen">
-
-  <!-- Header -->
-  <div class="header">
-    <div class="header-top">
-      <div class="header-logo">
-        <div class="header-logo-icon">⚡</div>
-        <div class="header-logo-name">Meter Control</div>
-      </div>
-      <span class="header-badge badge-ativa" id="licenca-badge">Ativa</span>
-    </div>
-    <div class="header-user" id="header-user-name">Técnico</div>
+  <div class="scanner-box" id="scannerContainer" style="display: none;">
+    <div id="reader"></div>
+    <button type="button" class="btn btn-secondary" onclick="pararLeitor()" style="border-radius:0;">Fechar Câmera</button>
   </div>
 
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab active" onclick="showTab('registrar')" id="tab-registrar">
-      <span class="tab-icon">📷</span> Registrar
-    </button>
-    <button class="tab" onclick="showTab('historico')" id="tab-historico">
-      <span class="tab-icon">📋</span> Histórico
-    </button>
-  </div>
-
-  <!-- Panel: Registrar -->
-  <div class="panel active" id="panel-registrar">
-
-    <div style="margin-bottom:14px;">
-      <div class="scanner-wrap">
-        <video id="preview" playsinline muted autoplay></video>
-        <div class="scanner-overlay">
-          <div class="scanner-frame"></div>
-          <div class="scanner-line"></div>
-        </div>
-        <div class="scanner-status" id="cam-status">Iniciando câmera...</div>
-      </div>
-
-      <!-- Botão de captura manual -->
-      <button id="btn-capturar" onclick="capturarFrame()">
-        📷 Capturar código de barras
-      </button>
-
-      <div class="scanner-controls">
-        <button class="btn-cam" id="btn-cam-toggle" onclick="toggleCamera()">⏸ Pausar</button>
-        <button class="btn-cam" id="btn-cam-switch" onclick="switchCamera()">🔄 Câmera</button>
-        <button class="btn-cam" id="btn-torch" onclick="toggleTorch()">🔦 Flash</button>
-      </div>
+  <form id="formMedidor" onsubmit="salvarDados(event)">
+    <div class="form-group">
+      <label for="numeroMedidor">Número do Medidor *</label>
+      <input type="text" id="numeroMedidor" placeholder="Digite ou escaneie o código" required>
     </div>
 
-    <div id="resultado-container">
-      <div class="resultado-header">Número do medidor</div>
-      <div class="resultado-body">
-        <input type="text" id="campo-medidor" placeholder="Leia o código ou digite..." inputmode="numeric"
-          oninput="onMedidorInput(this.value)" />
-        <div class="campo-hint" id="campo-hint">Aponte a câmera para o código de barras do medidor.</div>
-      </div>
-    </div>
-
-    <div class="tipo-toggle">
-      <button class="tipo-btn entrada" id="tipo-entrada" onclick="selectTipo('Entrada')">
-        <span class="tipo-icon">📥</span>
-        Entrada
-      </button>
-      <button class="tipo-btn saida" id="tipo-saida" onclick="selectTipo('Saída')">
-        <span class="tipo-icon">📤</span>
-        Saída
-      </button>
-    </div>
-
-    <div class="obs-wrap">
-      <label class="obs-label">Observação (opcional)</label>
-      <textarea id="campo-obs" placeholder="Ex: medidor danificado, local de instalação..."></textarea>
-    </div>
-
-    <button id="btn-registrar" onclick="registrar()" disabled>
-      ✓ Registrar
-    </button>
-  </div>
-
-  <!-- Panel: Histórico -->
-  <div class="panel" id="panel-historico">
-    <div class="historico-stats">
-      <div class="stat-card">
-        <div class="stat-val green" id="stat-entradas">0</div>
-        <div class="stat-lbl">Entradas</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-val red" id="stat-saidas">0</div>
-        <div class="stat-lbl">Saídas</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-val blue" id="stat-saldo">0</div>
-        <div class="stat-lbl">Saldo</div>
-      </div>
-    </div>
-
-    <div class="hist-controls">
-      <select class="hist-filter" id="filtro-tipo" onchange="renderHistorico()">
-        <option value="">Todos</option>
-        <option value="Entrada">Entradas</option>
-        <option value="Saída">Saídas</option>
+    <div class="form-group">
+      <label for="tipo">Tipo de Operação</label>
+      <select id="tipo">
+        <option value="Instalação">Instalação</option>
+        <option value="Retirada">Retirada</option>
+        <option value="Vistoria">Vistoria</option>
       </select>
-      <button class="btn-print" style="flex:1;margin:0;" onclick="imprimirRelatorio()">🖨 Imprimir</button>
-      <button class="btn-clear-hist" onclick="limparHistorico()">🗑</button>
     </div>
 
-    <div class="historico-list" id="historico-list"></div>
-  </div>
+    <div class="form-group">
+      <label for="responsavel">Responsável</label>
+      <input type="text" id="responsavel" placeholder="Nome do operador">
+    </div>
 
+    <div class="form-group">
+      <label for="observacao">Observação / Destino</label>
+      <textarea id="observacao" rows="2" placeholder="Opcional..."></textarea>
+    </div>
+
+    <div class="form-group">
+      <span id="gpsStatus" class="status-badge status-gps">Obtendo GPS...</span>
+    </div>
+
+    <button type="submit" class="btn" id="btnSalvar">Salvar na Planilha</button>
+  </form>
 </div>
-
-<!-- TOAST -->
-<div id="toast"></div>
 
 <script>
-// ══════════════════════════════════════════
-//  CONFIGURAÇÕES
-// ══════════════════════════════════════════
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2Hj0Jd79t-45kvDIMZGv1k9C3bCt7Bx3mRN2xtydIpKGeKF3irNPQPPyYginPIG50sg/exec';
-const PIX_KEY = '62676393049';
-const WHATSAPP_NUM = '5551996554505';
-
-// ══════════════════════════════════════════
-//  STATE
-// ══════════════════════════════════════════
-let currentTipo    = null;
-let cameraActive   = false;
-let currentStream  = null;
-let useFrontCamera = false;
-let torchOn        = false;
-let torchTrack     = null;
-let tecnico        = null;
-
-// Scanner
-let codeReader     = null;   // BrowserMultiFormatReader
-let scanCanvas     = null;
-let scanCtx        = null;
-let scanLoop       = null;
-let lastCode       = null;   // evita disparar o mesmo código repetido
-let lastCodeTime   = 0;
-
-// ══════════════════════════════════════════
-//  INIT
-// ══════════════════════════════════════════
-window.addEventListener('load', async () => {
-  const savedTecnico = getSavedTecnico();
-  if (!savedTecnico) {
-    hideSplash();
-    showScreen('screen-cadastro');
-    return;
-  }
-  tecnico = savedTecnico;
-  await verificarLicenca(true);
-});
-
-function hideSplash() {
-  const s = document.getElementById('splash');
-  s.classList.add('hidden');
-  setTimeout(() => s.remove(), 400);
-}
-
-// ══════════════════════════════════════════
-//  TECNICO / CADASTRO
-// ══════════════════════════════════════════
-function getSavedTecnico() {
-  const d = localStorage.getItem('mc_tecnico');
-  if (!d) return null;
-  try { return JSON.parse(d); } catch { return null; }
-}
-
-function saveTecnico(nome, whatsapp) {
-  const obj = { nome, whatsapp };
-  localStorage.setItem('mc_tecnico', JSON.stringify(obj));
-  return obj;
-}
-
-document.getElementById('btn-cadastrar').addEventListener('click', async () => {
-  const nome  = document.getElementById('cad-nome').value.trim();
-  const whats = document.getElementById('cad-whats').value.replace(/\D/g, '');
-  if (!nome)            { toast('Informe seu nome.', 'error'); return; }
-  if (whats.length < 10){ toast('WhatsApp inválido.', 'error'); return; }
-
-  const btn = document.getElementById('btn-cadastrar');
-  btn.disabled    = true;
-  btn.textContent = 'Verificando...';
-
-  tecnico = saveTecnico(nome, whats);
-  await verificarLicenca(true);
-});
-
-// ══════════════════════════════════════════
-//  LICENÇA
-// ══════════════════════════════════════════
-async function verificarLicenca(isInit = false) {
-  localStorage.removeItem('mc_licenca_cache');
-  let status = null;
-
-  try {
-    status = await jsonpRequest(
-      `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`,
-      8000
-    );
-    if (status.situacao === 'BLOQUEADA' || status.situacao === 'EXPIRADA') {
-      localStorage.removeItem('mc_licenca_cache');
-    } else {
-      localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...status, cachedAt: Date.now() }));
-    }
-  } catch (e) {
-    console.warn('Sem internet — usando cache:', e.message);
-    const cached = localStorage.getItem('mc_licenca_cache');
-    if (cached) {
-      try {
-        const c      = JSON.parse(cached);
-        const ageDias = (Date.now() - (c.cachedAt || 0)) / 86400000;
-        if (ageDias < 3) { status = c; }
-        else { status = { situacao: 'BLOQUEADA', mensagem: 'Sem conexão há mais de 3 dias. Conecte-se para verificar sua licença.' }; }
-      } catch {}
-    }
-  }
-
-  hideSplash();
-
-  if (!status) { mostrarApp('trial', null); return; }
-
-  const sit = (status.situacao || '').toUpperCase();
-  switch (sit) {
-    case 'ATIVA':    mostrarApp('ativa',  status.diasRestantes); break;
-    case 'TRIAL':    mostrarApp('trial',  status.diasRestantes); break;
-    case 'AVISO':    mostrarApp('aviso',  status.diasRestantes); break;
-    case 'EXPIRADA':
-    case 'BLOQUEADA': mostrarBloqueio(sit, status.mensagem);    break;
-    default:         mostrarApp('trial',  status.diasRestantes); break;
-  }
-}
-
-function mostrarApp(situacao, diasRestantes) {
-  showScreen('screen-app');
-  document.getElementById('header-user-name').textContent = tecnico ? tecnico.nome : 'Técnico';
-
-  const badge  = document.getElementById('licenca-badge');
-  const banner = document.getElementById('aviso-banner');
-
-  if (situacao === 'trial') {
-    const d = (diasRestantes != null && diasRestantes >= 0) ? diasRestantes : '?';
-    badge.textContent  = `Trial · ${d}d`;
-    badge.className    = 'header-badge badge-trial';
-    if (typeof d === 'number' && d <= 3) {
-      banner.innerHTML = `⏳ Seu trial encerra em <strong>${d} dia(s)</strong>. <a href="${getWhatsappLink('trial')}" target="_blank">Ative sua licença →</a>`;
-      banner.classList.add('show');
-    } else if (d === '?') {
-      banner.innerHTML = `⏳ Trial ativo. <a href="${getWhatsappLink('trial')}" target="_blank">Ative sua licença →</a>`;
-      banner.classList.add('show');
-    }
-  } else if (situacao === 'aviso') {
-    badge.textContent  = `Vence em ${diasRestantes}d`;
-    badge.className    = 'header-badge badge-aviso';
-    banner.innerHTML   = `⚠️ Sua licença vence em <strong>${diasRestantes} dia(s)</strong>. <a href="${getWhatsappLink('renovar')}" target="_blank">Renovar agora →</a>`;
-    banner.classList.add('show');
-  } else {
-    badge.textContent = 'Ativa';
-    badge.className   = 'header-badge badge-ativa';
-  }
-
-  initApp();
-}
-
-function mostrarBloqueio(situacao, mensagem) {
-  showScreen('screen-licenca');
-  const icon  = document.getElementById('lic-icon');
-  const title = document.getElementById('lic-title');
-  const msg   = document.getElementById('lic-msg');
-
-  if (situacao === 'EXPIRADA') {
-    icon.textContent  = '⌛';
-    title.textContent = 'Período encerrado';
-    msg.textContent   = mensagem || 'Seu trial de 7 dias encerrou. Ative sua licença para continuar.';
-  } else {
-    icon.textContent  = '🔒';
-    title.textContent = 'Acesso bloqueado';
-    msg.textContent   = mensagem || 'Acesso suspenso. Verifique sua licença.';
-  }
-
-  document.getElementById('btn-whats-licenca').href = getWhatsappLink(situacao === 'EXPIRADA' ? 'ativar' : 'suporte');
-}
-
-document.getElementById('btn-verificar-lic').addEventListener('click', async () => {
-  const btn = document.getElementById('btn-verificar-lic');
-  btn.textContent = '⏳ Verificando...';
-  btn.disabled    = true;
-  await verificarLicenca(false);
-  btn.textContent = '🔄 Já paguei — verificar';
-  btn.disabled    = false;
-});
-
-function getWhatsappLink(motivo) {
-  const msgs = {
-    trial:   `Olá! Quero ativar minha licença do Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
-    ativar:  `Olá! Quero ativar o Meter Control. Já realizei o PIX. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
-    renovar: `Olá! Quero renovar minha licença do Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
-    suporte: `Olá! Preciso de suporte no Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
-  };
-  return `https://wa.me/${WHATSAPP_NUM}?text=${encodeURIComponent(msgs[motivo] || msgs.suporte)}`;
-}
-
-// ══════════════════════════════════════════
-//  APP PRINCIPAL
-// ══════════════════════════════════════════
-function initApp() {
-  renderHistorico();
-  initScanner();
-}
-
-// ══════════════════════════════════════════
-//  SCREENS / TABS
-// ══════════════════════════════════════════
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-}
-
-function showTab(tab) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t  => t.classList.remove('active'));
-  document.getElementById('panel-' + tab).classList.add('active');
-  document.getElementById('tab-'   + tab).classList.add('active');
-
-  if (tab === 'historico') {
-    renderHistorico();
-    stopCamera();
-  } else {
-    startCamera();
-  }
-}
-
-// ══════════════════════════════════════════
-//  SCANNER  ← BLOCO REESCRITO
-// ══════════════════════════════════════════
-
-/*
-  ESTRATÉGIA:
-  1. Usa BrowserMultiFormatReader do ZXing — a API oficial para browser,
-     que lida corretamente com o elemento <video> já em andamento.
-  2. Loop de auto-scan via setInterval lendo o canvas do vídeo com
-     decodeFromImageElement (aceita canvas como ImageElement).
-  3. Captura manual (botão) força uma leitura imediata da mesma forma.
-  4. Debounce de 2s para evitar disparar o mesmo código repetido.
-*/
-
-async function initScanner() {
-  // Prepara canvas reutilizável
-  scanCanvas = document.createElement('canvas');
-  scanCtx    = scanCanvas.getContext('2d', { willReadFrequently: true });
-
-  // Instancia o leitor ZXing com todos os formatos relevantes
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.CODE_128,
-    ZXing.BarcodeFormat.CODE_39,
-    ZXing.BarcodeFormat.CODE_93,
-    ZXing.BarcodeFormat.ITF,
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.QR_CODE,
-    ZXing.BarcodeFormat.DATA_MATRIX,
-  ]);
-  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
-  codeReader = new ZXing.BrowserMultiFormatReader(hints);
-
-  await startCamera();
-}
-
-async function startCamera() {
-  if (cameraActive) return;
-  setStatus('Iniciando câmera...');
-
-  try {
-    const constraints = {
-      video: {
-        facingMode: useFrontCamera ? 'user' : { ideal: 'environment' },
-        width:      { ideal: 1920 },
-        height:     { ideal: 1080 },
-      }
-    };
-
-    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-
-    const video = document.getElementById('preview');
-    video.srcObject = currentStream;
-    await video.play();
-
-    // Guarda track para torch
-    torchTrack = currentStream.getVideoTracks()[0];
-
-    cameraActive = true;
-    document.getElementById('btn-cam-toggle').textContent = '⏸ Pausar';
-    setStatus('Câmera ativa — lendo automaticamente...');
-
-    iniciarAutoScan(video);
-
-  } catch (e) {
-    console.error('Câmera:', e);
-    setStatus('⚠️ Permita acesso à câmera ou use o campo manual.');
-    cameraActive = false;
-  }
-}
-
-/*
-  iniciarAutoScan — lê o vídeo via canvas e decodifica com ZXing.
-  Usa decodeFromCanvas() que é um método do BrowserMultiFormatReader
-  equivalente a passar um ImageData diretamente ao MultiFormatReader,
-  mas sem o problema de tipo que existia com RGBLuminanceSource.
-*/
-function iniciarAutoScan(video) {
-  if (scanLoop) clearInterval(scanLoop);
-
-  scanLoop = setInterval(() => {
-    if (!cameraActive || !video || video.readyState < 2 || video.videoWidth === 0) return;
-    tentarLer(video);
-  }, 350);
-}
-
-function tentarLer(video) {
-  const W = video.videoWidth  || 1280;
-  const H = video.videoHeight || 720;
-  scanCanvas.width  = W;
-  scanCanvas.height = H;
-  scanCtx.drawImage(video, 0, 0, W, H);
-
-  // Tenta nas 3 regiões: imagem completa, região central e faixa horizontal
-  const regioes = [
-    { x: 0,                  y: 0,                  w: W,                  h: H                  },
-    { x: Math.floor(W*0.05), y: Math.floor(H*0.25), w: Math.floor(W*0.90), h: Math.floor(H*0.50) },
-    { x: 0,                  y: Math.floor(H*0.33), w: W,                  h: Math.floor(H*0.34) },
-  ];
-
-  for (const r of regioes) {
-    try {
-      const imageData = scanCtx.getImageData(r.x, r.y, r.w, r.h);
-      const lum       = ZXing.RGBLuminanceSource
-        ? new ZXing.RGBLuminanceSource(imageData.data, r.w, r.h)
-        : null;
-
-      if (!lum) {
-        // Fallback: usa decodeFromImageUrl via canvas.toDataURL — só no clique manual
-        break;
-      }
-
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      const result = codeReader.decodeBitmap(bitmap);
-
-      if (result) {
-        const code = result.getText().trim();
-        if (code) { onCodigoLido(code); return; }
-      }
-    } catch (_) { /* NotFoundException é normal — continua */ }
-  }
-}
-
-// Captura manual — botão 📷
-async function capturarFrame() {
-  const video = document.getElementById('preview');
-  if (!cameraActive || !video || video.readyState < 2) {
-    toast('Câmera não está ativa.', 'error');
-    return;
-  }
-
-  const btnCap = document.getElementById('btn-capturar');
-  btnCap.disabled    = true;
-  btnCap.textContent = '⏳ Processando...';
-  setStatus('📷 Processando...');
-
-  // Desenha frame no canvas
-  const W = video.videoWidth  || 1280;
-  const H = video.videoHeight || 720;
-  scanCanvas.width  = W;
-  scanCanvas.height = H;
-  scanCtx.drawImage(video, 0, 0, W, H);
-
-  let lido = false;
-
-  // Tenta via decodeFromImageUrl (canvas → dataURL) — mais compatível
-  try {
-    const dataUrl = scanCanvas.toDataURL('image/png');
-    const result  = await codeReader.decodeFromImageUrl(dataUrl);
-    if (result && result.getText()) {
-      onCodigoLido(result.getText().trim());
-      lido = true;
-    }
-  } catch (_) {}
-
-  // Se não leu, tenta por regiões com RGBLuminanceSource
-  if (!lido) {
-    const regioes = [
-      { x: 0,                  y: 0,                  w: W,                  h: H                  },
-      { x: Math.floor(W*0.05), y: Math.floor(H*0.25), w: Math.floor(W*0.90), h: Math.floor(H*0.50) },
-      { x: 0,                  y: Math.floor(H*0.33), w: W,                  h: Math.floor(H*0.34) },
-    ];
-
-    for (const r of regioes) {
-      try {
-        const imageData = scanCtx.getImageData(r.x, r.y, r.w, r.h);
-        const lum       = new ZXing.RGBLuminanceSource(imageData.data, r.w, r.h);
-        const bitmap    = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-        const result    = codeReader.decodeBitmap(bitmap);
-        if (result && result.getText()) {
-          onCodigoLido(result.getText().trim());
-          lido = true;
-          break;
-        }
-      } catch (_) {}
-    }
-  }
-
-  if (!lido) {
-    setStatus('❌ Não leu — aproxime mais ou tente campo manual.');
-    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    setTimeout(() => setStatus('Câmera ativa — lendo automaticamente...'), 2500);
-  }
-
-  btnCap.disabled    = false;
-  btnCap.textContent = '📷 Capturar código de barras';
-}
-
-function stopCamera() {
-  if (scanLoop) { clearInterval(scanLoop); scanLoop = null; }
-  if (!cameraActive) return;
-
-  if (currentStream) {
-    currentStream.getTracks().forEach(t => t.stop());
-    currentStream = null;
-  }
-
-  const video = document.getElementById('preview');
-  if (video) video.srcObject = null;
-
-  torchTrack   = null;
-  torchOn      = false;
-  cameraActive = false;
-
-  document.getElementById('btn-cam-toggle').textContent = '▶ Iniciar';
-  document.getElementById('btn-torch').classList.remove('active');
-  document.getElementById('btn-torch').textContent = '🔦 Flash';
-  setStatus('Câmera pausada.');
-}
-
-function toggleCamera() {
-  if (cameraActive) stopCamera(); else startCamera();
-}
-
-async function switchCamera() {
-  useFrontCamera = !useFrontCamera;
-  stopCamera();
-  await startCamera();
-}
-
-async function toggleTorch() {
-  torchOn = !torchOn;
-  const btn = document.getElementById('btn-torch');
-
-  if (torchTrack) {
-    try {
-      await torchTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
-      btn.classList.toggle('active', torchOn);
-      btn.textContent = torchOn ? '🔦 Flash ON' : '🔦 Flash';
-      return;
-    } catch (_) {}
-  }
-
-  if (torchOn) {
-    try {
-      const streamTorch = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, advanced: [{ torch: true }] }
-      });
-      const newTrack = streamTorch.getVideoTracks()[0];
-      if (currentStream) {
-        const oldTrack = currentStream.getVideoTracks()[0];
-        if (oldTrack) { oldTrack.stop(); currentStream.removeTrack(oldTrack); }
-        currentStream.addTrack(newTrack);
-      }
-      torchTrack = newTrack;
-      btn.classList.add('active');
-      btn.textContent = '🔦 Flash ON';
-      return;
-    } catch (_) {}
-  } else {
-    try {
-      if (torchTrack) torchTrack.stop();
-      torchOn = false;
-      btn.classList.remove('active');
-      btn.textContent = '🔦 Flash';
-      stopCamera();
-      await startCamera();
-      return;
-    } catch (_) {}
-  }
-
-  torchOn = !torchOn;
-  toast('Flash não suportado neste dispositivo.', 'warn');
-}
-
-function setStatus(msg) {
-  const el = document.getElementById('cam-status');
-  if (el) el.textContent = msg;
-}
-
-function onCodigoLido(code) {
-  if (!code) return;
-
-  // Debounce: mesmo código nos últimos 2s é ignorado
-  const now = Date.now();
-  if (code === lastCode && (now - lastCodeTime) < 2000) return;
-  lastCode     = code;
-  lastCodeTime = now;
-
-  const campo = document.getElementById('campo-medidor');
-  campo.value = code;
-  campo.classList.remove('error');
-  campo.classList.add('success');
-  setStatus(`✓ Lido: ${code}`);
-  onMedidorInput(code);
-  toast('✓ Código lido: ' + code, 'success');
-  if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
-}
-
-// ══════════════════════════════════════════
-//  TIPO
-// ══════════════════════════════════════════
-function selectTipo(tipo) {
-  currentTipo = tipo;
-  document.getElementById('tipo-entrada').classList.toggle('selected', tipo === 'Entrada');
-  document.getElementById('tipo-saida').classList.toggle('selected',   tipo === 'Saída');
-  updateBtnRegistrar();
-}
-
-// ══════════════════════════════════════════
-//  MEDIDOR INPUT
-// ══════════════════════════════════════════
-function onMedidorInput(val) {
-  const campo = document.getElementById('campo-medidor');
-  campo.classList.remove('success', 'error');
-  document.getElementById('campo-hint').textContent = val
-    ? 'Selecione o tipo de movimentação.'
-    : 'Aponte a câmera para o código de barras do medidor.';
-  updateBtnRegistrar();
-}
-
-function updateBtnRegistrar() {
-  const val = document.getElementById('campo-medidor').value.trim();
-  document.getElementById('btn-registrar').disabled = !(val && currentTipo);
-}
-
-// ══════════════════════════════════════════
-//  REGISTRAR
-// ══════════════════════════════════════════
-function registrar() {
-  const num = document.getElementById('campo-medidor').value.trim();
-  const obs = document.getElementById('campo-obs').value.trim();
-
-  if (!num)        { toast('Informe o número do medidor.', 'error'); return; }
-  if (!currentTipo){ toast('Selecione Entrada ou Saída.', 'error'); return; }
-
-  const registros = getRegistros();
-  const duplicado = registros.find(r => r.num === num && r.tipo === currentTipo);
-  if (duplicado) {
-    document.getElementById('campo-medidor').classList.add('error');
-    toast(`❌ Medidor já tem ${currentTipo} registrada!`, 'error');
-    return;
-  }
-
-  const btnReg = document.getElementById('btn-registrar');
-  btnReg.disabled   = true;
-  btnReg.innerHTML  = '📍 Capturando GPS...';
-
-  const salvarComGPS = (gps) => {
-    const agora = new Date();
-    const novoRegistro = {
-      id:      Date.now(),
-      num,
-      tipo:    currentTipo,
-      obs,
-      gps,
-      data:    agora.toLocaleDateString('pt-BR'),
-      hora:    agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      tecnico: tecnico?.nome || 'Técnico'
-    };
-
-    registros.unshift(novoRegistro);
-    saveRegistros(registros);
-
-    toast(`✓ ${currentTipo} registrada: ${num}`, 'success');
-    if (navigator.vibrate) navigator.vibrate(100);
-
-    // Reseta formulário
-    document.getElementById('campo-medidor').value = '';
-    document.getElementById('campo-medidor').classList.remove('success', 'error');
-    document.getElementById('campo-obs').value    = '';
-    document.getElementById('campo-hint').textContent = 'Aponte a câmera para o código de barras do medidor.';
-    currentTipo = null;
-    lastCode    = null; // limpa debounce para próximo medidor
-    document.getElementById('tipo-entrada').classList.remove('selected');
-    document.getElementById('tipo-saida').classList.remove('selected');
-    btnReg.innerHTML = '✓ Registrar';
-    btnReg.disabled  = true;
-    setStatus('Pronto para próxima bipagem.');
-  };
-
-  if (navigator.geolocation) {
-    const gpsTimeout = setTimeout(() => salvarComGPS('Sem GPS'), 6000);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        clearTimeout(gpsTimeout);
-        salvarComGPS(`${pos.coords.latitude.toFixed(6)},${pos.coords.longitude.toFixed(6)}`);
-      },
-      () => { clearTimeout(gpsTimeout); salvarComGPS('Sem GPS'); },
-      { timeout: 5000, maximumAge: 30000, enableHighAccuracy: true }
-    );
-  } else {
-    salvarComGPS('Sem GPS');
-  }
-}
-
-// ══════════════════════════════════════════
-//  HISTÓRICO
-// ══════════════════════════════════════════
-function getRegistros() {
-  const d = localStorage.getItem('mc_registros');
-  if (!d) return [];
-  try { return JSON.parse(d); } catch { return []; }
-}
-
-function saveRegistros(arr) {
-  localStorage.setItem('mc_registros', JSON.stringify(arr));
-}
-
-function renderHistorico() {
-  const registros = getRegistros();
-  const filtro    = document.getElementById('filtro-tipo')?.value || '';
-  const filtered  = filtro ? registros.filter(r => r.tipo === filtro) : registros;
-
-  const entradas = registros.filter(r => r.tipo === 'Entrada').length;
-  const saidas   = registros.filter(r => r.tipo === 'Saída').length;
-  document.getElementById('stat-entradas').textContent = entradas;
-  document.getElementById('stat-saidas').textContent   = saidas;
-  document.getElementById('stat-saldo').textContent    = entradas - saidas;
-
-  const list = document.getElementById('historico-list');
-  if (filtered.length === 0) {
-    list.innerHTML = '<div class="hist-empty">📭 Nenhum registro encontrado.</div>';
-    return;
-  }
-
-  list.innerHTML = filtered.map(r => `
-    <div class="hist-item">
-      <div class="hist-tipo-badge ${r.tipo === 'Entrada' ? 'entrada' : 'saida'}">
-        ${r.tipo === 'Entrada' ? '📥' : '📤'}
-      </div>
-      <div class="hist-info">
-        <div class="hist-num">${r.num}</div>
-        <div class="hist-meta">${r.tipo} · ${r.data} ${r.hora} · ${r.tecnico}</div>
-        ${r.gps && r.gps !== 'Sem GPS' ? `<div class="hist-obs">📍 ${r.gps}</div>` : ''}
-        ${r.obs ? `<div class="hist-obs">${r.obs}</div>` : ''}
-      </div>
-    </div>
-  `).join('');
-}
-
-function limparHistorico() {
-  if (!confirm('Apagar todo o histórico deste dispositivo?')) return;
-  localStorage.removeItem('mc_registros');
-  renderHistorico();
-  toast('Histórico apagado.', 'warn');
-}
-
-function imprimirRelatorio() {
-  const registros = getRegistros();
-  const entradas  = registros.filter(r => r.tipo === 'Entrada').length;
-  const saidas    = registros.filter(r => r.tipo === 'Saída').length;
-  const agora     = new Date().toLocaleString('pt-BR');
-
-  const linhas = registros.map(r => {
-    const gpsVal = r.gps && r.gps !== 'Sem GPS'
-      ? `<a href="https://maps.google.com/?q=${r.gps}" target="_blank">${r.gps}</a>`
-      : 'Sem GPS';
-    return `<tr><td>${r.num}</td><td>${r.tipo}</td><td>${r.data} ${r.hora}</td><td>${r.tecnico}</td><td>${gpsVal}</td><td>${r.obs || ''}</td></tr>`;
-  }).join('');
-
-  const html = `
-    <html><head><meta charset="UTF-8"><title>Relatório Meter Control</title>
-    <style>
-      body{font-family:Arial,sans-serif;font-size:12px;margin:20px;}
-      h1{font-size:18px;margin-bottom:4px;}
-      .sub{color:#666;margin-bottom:16px;font-size:11px;}
-      table{width:100%;border-collapse:collapse;}
-      th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;}
-      th{background:#f0f0f0;font-weight:600;}
-      .summary{margin-bottom:14px;display:flex;gap:20px;}
-      .stat{font-size:13px;}
-    </style></head>
-    <body>
-    <h1>⚡ Meter Control — Relatório</h1>
-    <div class="sub">Gerado em ${agora} · Técnico: ${tecnico?.nome || '-'}</div>
-    <div class="summary">
-      <span class="stat">📥 Entradas: <strong>${entradas}</strong></span>
-      <span class="stat">📤 Saídas: <strong>${saidas}</strong></span>
-      <span class="stat">📊 Saldo: <strong>${entradas - saidas}</strong></span>
-    </div>
-    <table>
-      <thead><tr><th>Medidor</th><th>Tipo</th><th>Data/Hora</th><th>Técnico</th><th>GPS</th><th>Obs</th></tr></thead>
-      <tbody>${linhas}</tbody>
-    </table>
-    </body></html>
-  `;
-
-  const w = window.open('', '_blank');
-  w.document.write(html);
-  w.document.close();
-  w.print();
-}
-
-// ══════════════════════════════════════════
-//  UTILS
-// ══════════════════════════════════════════
-function jsonpRequest(url, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const cbName = 'mc_cb_' + Date.now();
-    const script = document.createElement('script');
-    let done = false;
-
-    const cleanup = () => {
-      done = true;
-      delete window[cbName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-    };
-
-    window[cbName] = (data) => { cleanup(); resolve(data); };
-
-    const timer = setTimeout(() => {
-      if (!done) { cleanup(); reject(new Error('Timeout')); }
-    }, timeoutMs || 8000);
-
-    script.onerror = () => { clearTimeout(timer); cleanup(); reject(new Error('Erro de rede')); };
-    script.src     = url + '&callback=' + cbName;
-    document.head.appendChild(script);
+  // ⚠️ SUBSTITUA PELA URL DO SEU GOOGLE APPS SCRIPT PUBLICADO
+  const APPS_URL = "https://script.google.com/macros/s/SUA_URL_AQUI/exec";
+
+  let html5QrCode = null;
+  let dadosGps = { lat: "", lng: "", precisao: "" };
+
+  // Captura localização ao carregar a página
+  window.addEventListener('DOMContentLoaded', () => {
+    obterGps();
   });
-}
 
-function toast(msg, type = '') {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className   = 'show ' + type;
-  clearTimeout(window._toastTimeout);
-  window._toastTimeout = setTimeout(() => { t.className = ''; }, 2800);
-}
+  function obterGps() {
+    const status = document.getElementById('gpsStatus');
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          dadosGps.lat = pos.coords.latitude;
+          dadosGps.lng = pos.coords.longitude;
+          dadosGps.precisao = pos.coords.accuracy;
+          status.innerText = `GPS OK (Precisão: ±${Math.round(pos.coords.accuracy)}m)`;
+        },
+        (err) => {
+          status.innerText = "GPS Indisponível / Negado";
+          console.warn("Erro GPS:", err);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    } else {
+      status.innerText = "GPS Não suportado";
+    }
+  }
+
+  // --- LEITOR DE CÓDIGO DE BARRAS ---
+  async function iniciarLeitor() {
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      alert("Atenção: A câmera exige conexão segura (HTTPS).");
+      return;
+    }
+
+    document.getElementById('scannerContainer').style.display = 'block';
+
+    if (!html5QrCode) {
+      html5QrCode = new Html5Qrcode("reader");
+    }
+
+    const config = {
+      fps: 15,
+      qrbox: { width: 300, height: 140 },
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.EAN_13
+      ]
+    };
+
+    const onScanSuccess = (decodedText) => {
+      document.getElementById('numeroMedidor').value = decodedText;
+      pararLeitor();
+    };
+
+    try {
+      // 1. Tenta abrir a câmera traseira
+      await html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+    } catch (err) {
+      console.warn("Falha no facingMode, tentando seleção de lista de câmeras...", err);
+      // 2. Fallback: Lista câmeras e seleciona a última (traseira principal)
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          const cameraTraseira = devices[devices.length - 1];
+          await html5QrCode.start(cameraTraseira.id, config, onScanSuccess);
+        } else {
+          alert("Nenhuma câmera encontrada no dispositivo.");
+        }
+      } catch (errFallback) {
+        alert("Não foi possível acessar a câmera. Verifique as permissões do navegador.");
+      }
+    }
+  }
+
+  function pararLeitor() {
+    if (html5QrCode && html5QrCode.isScanning) {
+      html5QrCode.stop().then(() => {
+        document.getElementById('scannerContainer').style.display = 'none';
+      });
+    } else {
+      document.getElementById('scannerContainer').style.display = 'none';
+    }
+  }
+
+  // --- ENVIO DOS DADOS (JSONP) ---
+  function salvarDados(event) {
+    event.preventDefault();
+    const btn = document.getElementById('btnSalvar');
+    btn.disabled = true;
+    btn.innerText = "Enviando...";
+
+    const numero = document.getElementById('numeroMedidor').value.trim();
+    const tipo = document.getElementById('tipo').value;
+    const responsavel = document.getElementById('responsavel').value.trim();
+    const observacao = document.getElementById('observacao').value.trim();
+
+    // Nome único para a função callback do JSONP
+    const callbackName = 'jsonp_cb_' + Math.round(100000 * Math.random());
+
+    window[callbackName] = function(data) {
+      delete window[callbackName];
+      document.body.removeChild(script);
+      btn.disabled = false;
+      btn.innerText = "Salvar na Planilha";
+
+      if (data.status === 'sucesso') {
+        alert("Medidor salvo com sucesso!");
+        document.getElementById('formMedidor').reset();
+      } else {
+        alert("Erro ao salvar: " + data.mensagem);
+      }
+    };
+
+    // Monta a URL com os parâmetros de envio
+    const url = `${APPS_URL}?callback=${callbackName}` +
+      `&numero=${encodeURIComponent(numero)}` +
+      `&tipo=${encodeURIComponent(tipo)}` +
+      `&responsavel=${encodeURIComponent(responsavel)}` +
+      `&observacao=${encodeURIComponent(observacao)}` +
+      `&lat=${encodeURIComponent(dadosGps.lat)}` +
+      `&lng=${encodeURIComponent(dadosGps.lng)}` +
+      `&precisao=${encodeURIComponent(dadosGps.precisao)}`;
+
+    const script = document.createElement('script');
+    script.src = url;
+    script.onerror = function() {
+      alert("Falha na comunicação com o servidor.");
+      btn.disabled = false;
+      btn.innerText = "Salvar na Planilha";
+    };
+    document.body.appendChild(script);
+  }
 </script>
+
 </body>
 </html>
