@@ -789,6 +789,29 @@ document.getElementById('btn-cadastrar').addEventListener('click', async () => {
 // ══════════════════════════════════════════
 //  LICENÇA
 // ══════════════════════════════════════════
+function normalizarLicenca(raw) {
+  const data = raw || {};
+  const statusRaw = String(data.situacao || data.status || '').trim().toUpperCase();
+  const tipo = String(data.tipo || '').trim().toLowerCase();
+  const vencimento = data.vencimento || data.dataVencimento || data.data_vencimento || '';
+  let dias = Number.isFinite(Number(data.diasRestantes)) ? Number(data.diasRestantes) : null;
+  if (dias === null && vencimento) {
+    const partes = String(vencimento).split(/[\/-]/).map(Number);
+    let venc;
+    if (partes.length === 3) {
+      venc = partes[0] > 31 ? new Date(partes[0], partes[1] - 1, partes[2], 23, 59, 59) : new Date(partes[2], partes[1] - 1, partes[0], 23, 59, 59);
+    }
+    if (venc && !Number.isNaN(venc.getTime())) dias = Math.ceil((venc - new Date()) / 86400000);
+  }
+  let situacao = statusRaw;
+  if (statusRaw === 'BLOQUEADO' || statusRaw === 'BLOQUEADA' || statusRaw === 'INATIVO' || statusRaw === 'INATIVA') situacao = 'BLOQUEADA';
+  else if (statusRaw === 'EXPIRADO' || statusRaw === 'EXPIRADA' || (dias !== null && dias < 0)) situacao = 'EXPIRADA';
+  else if (tipo === 'trial' || statusRaw === 'TRIAL') situacao = 'TRIAL';
+  else if (statusRaw === 'ATIVO' || statusRaw === 'ATIVA' || statusRaw === 'OK') situacao = (dias !== null && dias <= 15) ? 'AVISO' : 'ATIVA';
+  else if (!situacao) situacao = (tipo === 'trial') ? 'TRIAL' : 'ATIVA';
+  return { ...data, situacao, diasRestantes: dias, vencimento };
+}
+
 async function verificarLicenca(isInit = false) {
   localStorage.removeItem('mc_licenca_cache');
   let status = null;
@@ -798,6 +821,7 @@ async function verificarLicenca(isInit = false) {
       `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`,
       8000
     );
+    status = normalizarLicenca(status);
     if (status.situacao === 'BLOQUEADA' || status.situacao === 'EXPIRADA') {
       localStorage.removeItem('mc_licenca_cache');
     } else {
