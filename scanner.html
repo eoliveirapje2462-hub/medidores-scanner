@@ -1031,43 +1031,38 @@ async function startCamera() {
 //  Desenha o frame no canvas 1280×720 e tenta
 //  decodificar via getImageData — leve e estável.
 // ──────────────────────────────────────────
+function tentarDecodificar(imgData, w, h) {
+  const fontes = [ZXing.HybridBinarizer, ZXing.GlobalHistogramBinarizer].filter(Boolean);
+  for (const Fonte of fontes) {
+    try {
+      if (zxingReader.reset) zxingReader.reset();
+      const lum = new ZXing.RGBLuminanceSource(imgData.data, w, h);
+      const bitmap = new ZXing.BinaryBitmap(new Fonte(lum));
+      const result = zxingReader.decode(bitmap);
+      if (result) return result.getText().trim();
+    } catch (_) {}
+  }
+  return null;
+}
+
 function iniciarAutoScan(video) {
   if (scanLoop) clearInterval(scanLoop);
-
   scanLoop = setInterval(() => {
     if (!cameraActive || video.readyState < 2) return;
-
-    // Desenha sempre em 1280×720 — sem usar videoWidth/Height diretamente
     scanCtx.drawImage(video, 0, 0, SCAN_W, SCAN_H);
-
     try {
       const imgData = scanCtx.getImageData(0, 0, SCAN_W, SCAN_H);
-      // Converte RGBA → Uint8ClampedArray que o ZXing espera
-      const lum    = new ZXing.RGBLuminanceSource(imgData.data, SCAN_W, SCAN_H);
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      const result = zxingReader.decode(bitmap);
-
-      if (result) {
-        const code = result.getText().trim();
-        if (code && code !== lastReadCode) {
-          lastReadCode = code;
-          onCodigoLido(code);
-          // Reseta o bloqueio de repetição após 3s
-          setTimeout(() => { lastReadCode = ''; }, 3000);
-        }
+      const code = tentarDecodificar(imgData, SCAN_W, SCAN_H);
+      if (code && code !== lastReadCode) {
+        lastReadCode = code;
+        onCodigoLido(code);
+        setTimeout(() => { lastReadCode = ''; }, 3000);
       }
-    } catch (_) {
-      // NotFoundException é normal quando não tem código — ignora
-    }
+    } catch (_) {}
   }, 500);
 }
 
-// ──────────────────────────────────────────
-//  CAPTURA MANUAL — botão 📷
-//  Tenta 4 estratégias: imagem completa,
-//  região central, faixa horizontal e recorte
-//  crop agressivo (só o centro).
-// ──────────────────────────────────────────
+// Captura manual: tenta o quadro inteiro e recortes diferentes.
 async function capturarFrame() {
   const video = document.getElementById('preview');
   if (!cameraActive || video.readyState < 2) {
@@ -1075,41 +1070,35 @@ async function capturarFrame() {
     return;
   }
 
+  const btn = document.getElementById('btn-capturar');
+  btn.disabled = true;
   setStatus('📷 Processando...');
-
-  // Desenha frame atual em 1280×720
   scanCtx.drawImage(video, 0, 0, SCAN_W, SCAN_H);
 
   const tentativas = [
-    // 1. Imagem completa 1280×720
     { x: 0, y: 0, w: SCAN_W, h: SCAN_H },
-    // 2. Região central (onde o frame de mira fica ~60% central)
-    { x: Math.floor(SCAN_W * 0.1), y: Math.floor(SCAN_H * 0.25),
-      w: Math.floor(SCAN_W * 0.8), h: Math.floor(SCAN_H * 0.50) },
-    // 3. Faixa horizontal — ideal para código de barras 1D
-    { x: 0,                        y: Math.floor(SCAN_H * 0.33),
-      w: SCAN_W,                   h: Math.floor(SCAN_H * 0.34) },
-    // 4. Crop agressivo: só os 40% centrais
-    { x: Math.floor(SCAN_W * 0.3), y: Math.floor(SCAN_H * 0.35),
-      w: Math.floor(SCAN_W * 0.4), h: Math.floor(SCAN_H * 0.30) },
+    { x: Math.floor(SCAN_W * 0.05), y: Math.floor(SCAN_H * 0.10), w: Math.floor(SCAN_W * 0.90), h: Math.floor(SCAN_H * 0.40) },
+    { x: Math.floor(SCAN_W * 0.05), y: Math.floor(SCAN_H * 0.20), w: Math.floor(SCAN_W * 0.90), h: Math.floor(SCAN_H * 0.50) },
+    { x: 0, y: Math.floor(SCAN_H * 0.30), w: SCAN_W, h: Math.floor(SCAN_H * 0.40) },
+    { x: Math.floor(SCAN_W * 0.15), y: Math.floor(SCAN_H * 0.25), w: Math.floor(SCAN_W * 0.70), h: Math.floor(SCAN_H * 0.50) },
   ];
 
   for (const t of tentativas) {
     try {
       const imgData = scanCtx.getImageData(t.x, t.y, t.w, t.h);
-      const lum     = new ZXing.RGBLuminanceSource(imgData.data, t.w, t.h);
-      const bitmap  = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      const result  = zxingReader.decode(bitmap);
-      if (result) {
-        onCodigoLido(result.getText().trim());
+      const code = tentarDecodificar(imgData, t.w, t.h);
+      if (code) {
+        onCodigoLido(code);
+        btn.disabled = false;
         return;
       }
     } catch (_) {}
   }
 
-  setStatus('❌ Não leu — tente mais perto ou use o campo manual.');
+  btn.disabled = false;
+  setStatus('❌ Não leu — aproxime o celular e centralize o código.');
   if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-  setTimeout(() => setStatus('📷 Aponte para o código e pressione Capturar'), 2000);
+  setTimeout(() => setStatus('📷 Aponte para o código e pressione Capturar'), 2500);
 }
 
 function stopCamera() {
