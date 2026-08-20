@@ -1031,7 +1031,31 @@ async function startCamera() {
 //  Desenha o frame no canvas 1280×720 e tenta
 //  decodificar via getImageData — leve e estável.
 // ──────────────────────────────────────────
-function tentarDecodificar(imgData, w, h) {
+let scanBusy = false;
+let nativeBarcodeDetector = null;
+
+async function tentarDecodificar(imgData, w, h) {
+  // Primeiro tenta o leitor nativo do navegador Android, quando disponível.
+  if ('BarcodeDetector' in window) {
+    try {
+      if (!nativeBarcodeDetector) {
+        const desejados = ['code_128','code_39','code_93','itf','ean_13','ean_8','qr_code','data_matrix','upc_a','upc_e','codabar','aztec','pdf417'];
+        const suportados = await BarcodeDetector.getSupportedFormats();
+        const formatos = desejados.filter(f => suportados.includes(f));
+        if (formatos.length) nativeBarcodeDetector = new BarcodeDetector({ formats: formatos });
+      }
+      if (nativeBarcodeDetector) {
+        const miniCanvas = document.createElement('canvas');
+        miniCanvas.width = w;
+        miniCanvas.height = h;
+        miniCanvas.getContext('2d').putImageData(imgData, 0, 0);
+        const encontrados = await nativeBarcodeDetector.detect(miniCanvas);
+        if (encontrados.length && encontrados[0].rawValue) return encontrados[0].rawValue.trim();
+      }
+    } catch (_) {}
+  }
+
+  // Fallback ZXing com dois métodos de binarização.
   const fontes = [ZXing.HybridBinarizer, ZXing.GlobalHistogramBinarizer].filter(Boolean);
   for (const Fonte of fontes) {
     try {
@@ -1047,29 +1071,28 @@ function tentarDecodificar(imgData, w, h) {
 
 function iniciarAutoScan(video) {
   if (scanLoop) clearInterval(scanLoop);
-  scanLoop = setInterval(() => {
-    if (!cameraActive || video.readyState < 2) return;
-    scanCtx.drawImage(video, 0, 0, SCAN_W, SCAN_H);
+  scanLoop = setInterval(async () => {
+    if (!cameraActive || video.readyState < 2 || scanBusy) return;
+    scanBusy = true;
     try {
+      scanCtx.drawImage(video, 0, 0, SCAN_W, SCAN_H);
       const imgData = scanCtx.getImageData(0, 0, SCAN_W, SCAN_H);
-      const code = tentarDecodificar(imgData, SCAN_W, SCAN_H);
+      const code = await tentarDecodificar(imgData, SCAN_W, SCAN_H);
       if (code && code !== lastReadCode) {
         lastReadCode = code;
         onCodigoLido(code);
         setTimeout(() => { lastReadCode = ''; }, 3000);
       }
-    } catch (_) {}
+    } catch (_) {} finally { scanBusy = false; }
   }, 500);
 }
 
-// Captura manual: tenta o quadro inteiro e recortes diferentes.
 async function capturarFrame() {
   const video = document.getElementById('preview');
   if (!cameraActive || video.readyState < 2) {
     toast('Câmera não está ativa.', 'error');
     return;
   }
-
   const btn = document.getElementById('btn-capturar');
   btn.disabled = true;
   setStatus('📷 Processando...');
@@ -1077,16 +1100,16 @@ async function capturarFrame() {
 
   const tentativas = [
     { x: 0, y: 0, w: SCAN_W, h: SCAN_H },
-    { x: Math.floor(SCAN_W * 0.05), y: Math.floor(SCAN_H * 0.10), w: Math.floor(SCAN_W * 0.90), h: Math.floor(SCAN_H * 0.40) },
-    { x: Math.floor(SCAN_W * 0.05), y: Math.floor(SCAN_H * 0.20), w: Math.floor(SCAN_W * 0.90), h: Math.floor(SCAN_H * 0.50) },
-    { x: 0, y: Math.floor(SCAN_H * 0.30), w: SCAN_W, h: Math.floor(SCAN_H * 0.40) },
-    { x: Math.floor(SCAN_W * 0.15), y: Math.floor(SCAN_H * 0.25), w: Math.floor(SCAN_W * 0.70), h: Math.floor(SCAN_H * 0.50) },
+    { x: Math.floor(SCAN_W * 0.05), y: Math.floor(SCAN_H * 0.05), w: Math.floor(SCAN_W * 0.90), h: Math.floor(SCAN_H * 0.45) },
+    { x: Math.floor(SCAN_W * 0.05), y: Math.floor(SCAN_H * 0.15), w: Math.floor(SCAN_W * 0.90), h: Math.floor(SCAN_H * 0.55) },
+    { x: 0, y: Math.floor(SCAN_H * 0.25), w: SCAN_W, h: Math.floor(SCAN_H * 0.50) },
+    { x: Math.floor(SCAN_W * 0.10), y: Math.floor(SCAN_H * 0.20), w: Math.floor(SCAN_W * 0.80), h: Math.floor(SCAN_H * 0.60) },
   ];
 
   for (const t of tentativas) {
     try {
       const imgData = scanCtx.getImageData(t.x, t.y, t.w, t.h);
-      const code = tentarDecodificar(imgData, t.w, t.h);
+      const code = await tentarDecodificar(imgData, t.w, t.h);
       if (code) {
         onCodigoLido(code);
         btn.disabled = false;
@@ -1094,9 +1117,8 @@ async function capturarFrame() {
       }
     } catch (_) {}
   }
-
   btn.disabled = false;
-  setStatus('❌ Não leu — aproxime o celular e centralize o código.');
+  setStatus('❌ Não leu — aproxime e centralize o código de barras.');
   if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
   setTimeout(() => setStatus('📷 Aponte para o código e pressione Capturar'), 2500);
 }
