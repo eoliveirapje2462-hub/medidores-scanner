@@ -9,6 +9,7 @@
 
 <!-- Barcode scanning -->
 <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
 <style>
   :root {
@@ -286,6 +287,25 @@
   /* ── CONTENT PANELS ── */
   .panel { display: none; padding: 16px; }
   .panel.active { display: block; }
+
+  .btn-abrir-leitor {
+    width: 100%; background: #64748b; color: #fff; border: none;
+    border-radius: var(--radius-sm); font-size: 16px; font-weight: 700;
+    padding: 14px; cursor: pointer; font-family: var(--font); margin-bottom: 10px;
+  }
+  .leitor-modal {
+    display: none; position: fixed; inset: 0; z-index: 300;
+    background: rgba(15,17,23,.96); padding: 24px 16px;
+    align-items: center; justify-content: center;
+  }
+  .leitor-modal.open { display: flex; }
+  .leitor-card { width: 100%; max-width: 420px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+  .leitor-title { font-size: 17px; font-weight: 700; margin-bottom: 12px; text-align: center; }
+  #leitor-qrcode { width: 100%; overflow: hidden; border-radius: 10px; background: #000; }
+  .btn-fechar-leitor { width: 100%; margin-top: 12px; padding: 13px;
+    background: transparent; color: var(--text); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); font-size: 14px; font-family: var(--font); }
 
   /* ── CAMERA / SCANNER ── */
   .scanner-wrap {
@@ -620,6 +640,7 @@
   <div class="panel active" id="panel-registrar">
 
     <div style="margin-bottom:14px;">
+      <button class="btn-abrir-leitor" onclick="abrirLeitor()">📷 Abrir leitor de código</button>
       <div class="scanner-wrap">
         <video id="preview" playsinline muted autoplay></video>
         <div class="scanner-overlay">
@@ -1395,6 +1416,40 @@ function imprimirRelatorio() {
   w.document.write(html);
   w.document.close();
   w.print();
+}
+
+let leitorHtml5 = null;
+
+async function abrirLeitor() {
+  if (typeof Html5Qrcode === 'undefined') { toast('Leitor ainda carregando. Tente novamente.', 'error'); return; }
+  stopCamera();
+  document.getElementById('leitor-modal').classList.add('open');
+  leitorHtml5 = new Html5Qrcode('leitor-qrcode');
+  try {
+    await leitorHtml5.start(
+      { facingMode: 'environment' },
+      { fps: 12, qrbox: { width: 300, height: 150 }, aspectRatio: 1.777 },
+      (codigo) => {
+        onCodigoLido(String(codigo).trim());
+        fecharLeitor();
+        toast('✓ Código lido: ' + codigo, 'success');
+      },
+      () => {}
+    );
+  } catch (e) {
+    toast('Não foi possível abrir o leitor. Verifique a câmera.', 'error');
+    fecharLeitor();
+  }
+}
+
+async function fecharLeitor() {
+  if (leitorHtml5) {
+    try { if (leitorHtml5.isScanning) await leitorHtml5.stop(); } catch (_) {}
+    try { leitorHtml5.clear(); } catch (_) {}
+    leitorHtml5 = null;
+  }
+  document.getElementById('leitor-modal').classList.remove('open');
+  startCamera();
 }
 
 // ══════════════════════════════════════════
