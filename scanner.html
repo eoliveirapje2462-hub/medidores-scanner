@@ -726,8 +726,8 @@ let torchTrack = null;
 let tecnico = null;
 
 // Scanner interno — usa canvas fixo 1280×720 para não travar
-const SCAN_W = 1280;
-const SCAN_H = 720;
+let SCAN_W = 1280;
+let SCAN_H = 720;
 let scanCanvas = null;
 let scanCtx    = null;
 let zxingReader = null;
@@ -973,18 +973,8 @@ function initScanner() {
   scanCanvas.height = SCAN_H;
   scanCtx           = scanCanvas.getContext('2d', { willReadFrequently: true });
 
-  // Configura ZXing com os formatos de código de barras usados em medidores
+  // Não restringe o formato: medidores podem usar padrões diferentes.
   const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.CODE_128,
-    ZXing.BarcodeFormat.CODE_39,
-    ZXing.BarcodeFormat.CODE_93,
-    ZXing.BarcodeFormat.ITF,
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.QR_CODE,
-    ZXing.BarcodeFormat.DATA_MATRIX,
-  ]);
   hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
   zxingReader = new ZXing.MultiFormatReader();
   zxingReader.setHints(hints);
@@ -1008,6 +998,11 @@ async function startCamera() {
     const video = document.getElementById('preview');
     video.srcObject = currentStream;
     await video.play();
+    // Usa a resolução real entregue pela câmera, sem ampliar artificialmente.
+    SCAN_W = video.videoWidth || SCAN_W;
+    SCAN_H = video.videoHeight || SCAN_H;
+    scanCanvas.width = SCAN_W;
+    scanCanvas.height = SCAN_H;
 
     torchTrack   = currentStream.getVideoTracks()[0];
     cameraActive = true;
