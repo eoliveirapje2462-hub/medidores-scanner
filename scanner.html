@@ -723,27 +723,31 @@ const WHATSAPP_NUM = '5551996554505';
 let currentTipo = null;
 let cameraActive = false;
 let currentStream = null;
-let codeReader = null;
 let useFrontCamera = false;
 let torchOn = false;
 let torchTrack = null;
-let tecnico = null; // { nome, whatsapp }
+let tecnico = null;
+
+// Scanner interno — usa canvas fixo 1280×720 para não travar
+const SCAN_W = 1280;
+const SCAN_H = 720;
+let scanCanvas = null;
+let scanCtx    = null;
+let zxingReader = null;
+let scanLoop    = null;
+let lastReadCode = '';   // evita vibrar/toast repetido
 
 // ══════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════
 window.addEventListener('load', async () => {
   const savedTecnico = getSavedTecnico();
-
   if (!savedTecnico) {
     hideSplash();
     showScreen('screen-cadastro');
     return;
   }
-
   tecnico = savedTecnico;
-
-  // verifica licença
   await verificarLicenca(true);
 });
 
@@ -786,19 +790,14 @@ document.getElementById('btn-cadastrar').addEventListener('click', async () => {
 //  LICENÇA
 // ══════════════════════════════════════════
 async function verificarLicenca(isInit = false) {
-  // Sempre verifica online — cache só usado se sem internet
-  // Limpa cache antigo que possa ter TRIAL/ATIVA salvo incorretamente
   localStorage.removeItem('mc_licenca_cache');
   let status = null;
-  let online = false;
 
   try {
     status = await jsonpRequest(
       `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`,
       8000
     );
-    online = true;
-    // Se bloqueada/expirada, apaga cache para não sobrar resultado antigo
     if (status.situacao === 'BLOQUEADA' || status.situacao === 'EXPIRADA') {
       localStorage.removeItem('mc_licenca_cache');
     } else {
@@ -806,7 +805,6 @@ async function verificarLicenca(isInit = false) {
     }
   } catch (e) {
     console.warn('Sem internet — usando cache:', e.message);
-    // Offline: usa cache de até 3 dias
     const cached = localStorage.getItem('mc_licenca_cache');
     if (cached) {
       try {
@@ -814,10 +812,7 @@ async function verificarLicenca(isInit = false) {
         const ageDias = (Date.now() - (c.cachedAt || 0)) / 86400000;
         if (ageDias < 3) {
           status = c;
-          console.log('Cache offline válido:', ageDias.toFixed(1), 'dias');
         } else {
-          console.warn('Cache expirado — bloqueando por segurança');
-          // Cache velho demais sem internet → bloqueia
           status = { situacao: 'BLOQUEADA', mensagem: 'Sem conexão há mais de 3 dias. Conecte-se para verificar sua licença.' };
         }
       } catch {}
@@ -827,29 +822,18 @@ async function verificarLicenca(isInit = false) {
   hideSplash();
 
   if (!status) {
-    // sem conexão e sem cache → entrada restrita mas não bloqueia (modo offline gracioso)
     mostrarApp('trial', null);
     return;
   }
 
   const sit = (status.situacao || '').toUpperCase();
   switch (sit) {
-    case 'ATIVA':
-      mostrarApp('ativa', status.diasRestantes);
-      break;
-    case 'TRIAL':
-      mostrarApp('trial', status.diasRestantes);
-      break;
-    case 'AVISO':
-      mostrarApp('aviso', status.diasRestantes);
-      break;
+    case 'ATIVA':  mostrarApp('ativa',  status.diasRestantes); break;
+    case 'TRIAL':  mostrarApp('trial',  status.diasRestantes); break;
+    case 'AVISO':  mostrarApp('aviso',  status.diasRestantes); break;
     case 'EXPIRADA':
-    case 'BLOQUEADA':
-      mostrarBloqueio(sit, status.mensagem);
-      break;
-    default:
-      mostrarApp('trial', status.diasRestantes);
-      break;
+    case 'BLOQUEADA': mostrarBloqueio(sit, status.mensagem);   break;
+    default: mostrarApp('trial', status.diasRestantes);         break;
   }
 }
 
@@ -857,7 +841,7 @@ function mostrarApp(situacao, diasRestantes) {
   showScreen('screen-app');
   document.getElementById('header-user-name').textContent = tecnico ? tecnico.nome : 'Técnico';
 
-  const badge = document.getElementById('licenca-badge');
+  const badge  = document.getElementById('licenca-badge');
   const banner = document.getElementById('aviso-banner');
 
   if (situacao === 'trial') {
@@ -886,18 +870,18 @@ function mostrarApp(situacao, diasRestantes) {
 
 function mostrarBloqueio(situacao, mensagem) {
   showScreen('screen-licenca');
-  const icon = document.getElementById('lic-icon');
+  const icon  = document.getElementById('lic-icon');
   const title = document.getElementById('lic-title');
-  const msg = document.getElementById('lic-msg');
+  const msg   = document.getElementById('lic-msg');
 
   if (situacao === 'EXPIRADA') {
-    icon.textContent = '⌛';
+    icon.textContent  = '⌛';
     title.textContent = 'Período encerrado';
-    msg.textContent = mensagem || 'Seu trial de 7 dias encerrou. Ative sua licença para continuar.';
+    msg.textContent   = mensagem || 'Seu trial de 7 dias encerrou. Ative sua licença para continuar.';
   } else {
-    icon.textContent = '🔒';
+    icon.textContent  = '🔒';
     title.textContent = 'Acesso bloqueado';
-    msg.textContent = mensagem || 'Acesso suspenso. Verifique sua licença.';
+    msg.textContent   = mensagem || 'Acesso suspenso. Verifique sua licença.';
   }
 
   const whatsLink = getWhatsappLink(situacao === 'EXPIRADA' ? 'ativar' : 'suporte');
@@ -915,10 +899,10 @@ document.getElementById('btn-verificar-lic').addEventListener('click', async () 
 
 function getWhatsappLink(motivo) {
   const msgs = {
-    trial: `Olá! Quero ativar minha licença do Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
+    trial:  `Olá! Quero ativar minha licença do Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
     ativar: `Olá! Quero ativar o Meter Control. Já realizei o PIX. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
-    renovar: `Olá! Quero renovar minha licença do Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
-    suporte: `Olá! Preciso de suporte no Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
+    renovar:`Olá! Quero renovar minha licença do Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
+    suporte:`Olá! Preciso de suporte no Meter Control. Nome: ${tecnico?.nome} | WhatsApp: ${tecnico?.whatsapp}`,
   };
   const txt = encodeURIComponent(msgs[motivo] || msgs.suporte);
   return `https://wa.me/${WHATSAPP_NUM}?text=${txt}`;
@@ -955,18 +939,20 @@ function showTab(tab) {
 }
 
 // ══════════════════════════════════════════
-//  SCANNER — captura de frame
+//  SCANNER — CORREÇÃO PRINCIPAL
+//  Usa canvas fixo 1280×720 (não a resolução
+//  real da câmera) e HTMLVideoElementLuminanceSource
+//  para leitura ao vivo sem travar.
 // ══════════════════════════════════════════
 
-let scanCanvas    = null;
-let scanCtx       = null;
-let zxingReader   = null;
-let scanLoop      = null;
+function initScanner() {
+  // Canvas de tamanho fixo — independente da resolução da câmera
+  scanCanvas        = document.createElement('canvas');
+  scanCanvas.width  = SCAN_W;
+  scanCanvas.height = SCAN_H;
+  scanCtx           = scanCanvas.getContext('2d', { willReadFrequently: true });
 
-async function initScanner() {
-  scanCanvas = document.createElement('canvas');
-  scanCtx    = scanCanvas.getContext('2d', { willReadFrequently: true });
-
+  // Configura ZXing com os formatos de código de barras usados em medidores
   const hints = new Map();
   hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
     ZXing.BarcodeFormat.CODE_128,
@@ -982,18 +968,19 @@ async function initScanner() {
   zxingReader = new ZXing.MultiFormatReader();
   zxingReader.setHints(hints);
 
-  await startCamera();
+  startCamera();
 }
 
 async function startCamera() {
   if (cameraActive) return;
   setStatus('Iniciando câmera...');
   try {
+    // Pede 1280×720 — suficiente para qualquer código de barras
     const constraints = {
       video: {
         facingMode: useFrontCamera ? 'user' : { ideal: 'environment' },
-        width:  { ideal: 1920 },
-        height: { ideal: 1080 },
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
       }
     };
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -1001,48 +988,62 @@ async function startCamera() {
     video.srcObject = currentStream;
     await video.play();
 
-    torchTrack = currentStream.getVideoTracks()[0];
+    torchTrack   = currentStream.getVideoTracks()[0];
     cameraActive = true;
     document.getElementById('btn-cam-toggle').textContent = '⏸ Pausar';
-    setStatus('Aponte e pressione 📷 para ler');
+    setStatus('📷 Aponte para o código e pressione Capturar');
 
-    // Loop automático: tenta ler a cada 400ms sem travar a UI
     iniciarAutoScan(video);
 
   } catch (e) {
+    console.error('Câmera:', e);
     setStatus('⚠️ Permita acesso à câmera ou use o campo manual.');
     cameraActive = false;
   }
 }
 
+// ──────────────────────────────────────────
+//  AUTO-SCAN a cada 500ms
+//  Desenha o frame no canvas 1280×720 e tenta
+//  decodificar via getImageData — leve e estável.
+// ──────────────────────────────────────────
 function iniciarAutoScan(video) {
   if (scanLoop) clearInterval(scanLoop);
 
-  scanLoop = setInterval(async () => {
+  scanLoop = setInterval(() => {
     if (!cameraActive || video.readyState < 2) return;
 
-    // Usa resolução REAL do vídeo — sem reduzir
-    const W = video.videoWidth  || 1280;
-    const H = video.videoHeight || 720;
-    scanCanvas.width  = W;
-    scanCanvas.height = H;
-    scanCtx.drawImage(video, 0, 0, W, H);
+    // Desenha sempre em 1280×720 — sem usar videoWidth/Height diretamente
+    scanCtx.drawImage(video, 0, 0, SCAN_W, SCAN_H);
 
     try {
-      const img     = scanCtx.getImageData(0, 0, W, H);
-      const lum     = new ZXing.RGBLuminanceSource(img.data, W, H);
-      const bitmap  = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      const result  = zxingReader.decode(bitmap);
+      const imgData = scanCtx.getImageData(0, 0, SCAN_W, SCAN_H);
+      // Converte RGBA → Uint8ClampedArray que o ZXing espera
+      const lum    = new ZXing.RGBLuminanceSource(imgData.data, SCAN_W, SCAN_H);
+      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      const result = zxingReader.decode(bitmap);
+
       if (result) {
         const code = result.getText().trim();
-        onCodigoLido(code);
+        if (code && code !== lastReadCode) {
+          lastReadCode = code;
+          onCodigoLido(code);
+          // Reseta o bloqueio de repetição após 3s
+          setTimeout(() => { lastReadCode = ''; }, 3000);
+        }
       }
-    } catch (_) {}
-
-  }, 400); // tenta a cada 400ms
+    } catch (_) {
+      // NotFoundException é normal quando não tem código — ignora
+    }
+  }, 500);
 }
 
-// Captura manual — botão 📷
+// ──────────────────────────────────────────
+//  CAPTURA MANUAL — botão 📷
+//  Tenta 4 estratégias: imagem completa,
+//  região central, faixa horizontal e recorte
+//  crop agressivo (só o centro).
+// ──────────────────────────────────────────
 async function capturarFrame() {
   const video = document.getElementById('preview');
   if (!cameraActive || video.readyState < 2) {
@@ -1051,44 +1052,30 @@ async function capturarFrame() {
   }
 
   setStatus('📷 Processando...');
-  const W = video.videoWidth  || 1280;
-  const H = video.videoHeight || 720;
-  scanCanvas.width  = W;
-  scanCanvas.height = H;
-  scanCtx.drawImage(video, 0, 0, W, H);
 
-  // Tenta 3 estratégias em sequência
-  const strategies = [
-    // 1. Imagem completa
-    () => {
-      const img    = scanCtx.getImageData(0, 0, W, H);
-      const lum    = new ZXing.RGBLuminanceSource(img.data, W, H);
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      return zxingReader.decode(bitmap);
-    },
-    // 2. Região central (onde o frame de mira fica)
-    () => {
-      const x = Math.floor(W * 0.1), y = Math.floor(H * 0.3);
-      const w = Math.floor(W * 0.8), h = Math.floor(H * 0.4);
-      const img    = scanCtx.getImageData(x, y, w, h);
-      const lum    = new ZXing.RGBLuminanceSource(img.data, w, h);
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      return zxingReader.decode(bitmap);
-    },
-    // 3. Faixa horizontal central (código de barras)
-    () => {
-      const x = 0, y = Math.floor(H * 0.35);
-      const w = W, h = Math.floor(H * 0.30);
-      const img    = scanCtx.getImageData(x, y, w, h);
-      const lum    = new ZXing.RGBLuminanceSource(img.data, w, h);
-      const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      return zxingReader.decode(bitmap);
-    },
+  // Desenha frame atual em 1280×720
+  scanCtx.drawImage(video, 0, 0, SCAN_W, SCAN_H);
+
+  const tentativas = [
+    // 1. Imagem completa 1280×720
+    { x: 0, y: 0, w: SCAN_W, h: SCAN_H },
+    // 2. Região central (onde o frame de mira fica ~60% central)
+    { x: Math.floor(SCAN_W * 0.1), y: Math.floor(SCAN_H * 0.25),
+      w: Math.floor(SCAN_W * 0.8), h: Math.floor(SCAN_H * 0.50) },
+    // 3. Faixa horizontal — ideal para código de barras 1D
+    { x: 0,                        y: Math.floor(SCAN_H * 0.33),
+      w: SCAN_W,                   h: Math.floor(SCAN_H * 0.34) },
+    // 4. Crop agressivo: só os 40% centrais
+    { x: Math.floor(SCAN_W * 0.3), y: Math.floor(SCAN_H * 0.35),
+      w: Math.floor(SCAN_W * 0.4), h: Math.floor(SCAN_H * 0.30) },
   ];
 
-  for (const strategy of strategies) {
+  for (const t of tentativas) {
     try {
-      const result = strategy();
+      const imgData = scanCtx.getImageData(t.x, t.y, t.w, t.h);
+      const lum     = new ZXing.RGBLuminanceSource(imgData.data, t.w, t.h);
+      const bitmap  = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      const result  = zxingReader.decode(bitmap);
       if (result) {
         onCodigoLido(result.getText().trim());
         return;
@@ -1098,7 +1085,7 @@ async function capturarFrame() {
 
   setStatus('❌ Não leu — tente mais perto ou use o campo manual.');
   if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-  setTimeout(() => setStatus('Aponte e pressione 📷 para ler'), 2000);
+  setTimeout(() => setStatus('📷 Aponte para o código e pressione Capturar'), 2000);
 }
 
 function stopCamera() {
@@ -1108,10 +1095,12 @@ function stopCamera() {
     currentStream.getTracks().forEach(t => t.stop());
     currentStream = null;
   }
-  document.getElementById('preview').srcObject = null;
-  torchTrack = null;
-  torchOn    = false;
+  const video = document.getElementById('preview');
+  video.srcObject = null;
+  torchTrack  = null;
+  torchOn     = false;
   cameraActive = false;
+  lastReadCode = '';
   document.getElementById('btn-cam-toggle').textContent = '▶ Iniciar';
   document.getElementById('btn-torch').classList.remove('active');
   document.getElementById('btn-torch').textContent = '🔦 Flash';
@@ -1132,7 +1121,6 @@ async function toggleTorch() {
   torchOn = !torchOn;
   const btn = document.getElementById('btn-torch');
 
-  // Estratégia 1: usar a track já ativa
   if (torchTrack) {
     try {
       await torchTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
@@ -1142,16 +1130,11 @@ async function toggleTorch() {
     } catch (_) {}
   }
 
-  // Estratégia 2: pedir nova stream com torch ligado direto nas constraints
   if (torchOn) {
     try {
       const streamTorch = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          advanced: [{ torch: true }]
-        }
+        video: { facingMode: { ideal: 'environment' }, advanced: [{ torch: true }] }
       });
-      // Substitui a track de vídeo mantendo o stream ativo
       const newTrack = streamTorch.getVideoTracks()[0];
       if (currentStream) {
         const oldTrack = currentStream.getVideoTracks()[0];
@@ -1164,7 +1147,6 @@ async function toggleTorch() {
       return;
     } catch (_) {}
   } else {
-    // Desligar: para track atual e reinicia câmera normal
     try {
       if (torchTrack) torchTrack.stop();
       torchOn = false;
@@ -1176,8 +1158,7 @@ async function toggleTorch() {
     } catch (_) {}
   }
 
-  // Sem suporte nenhum
-  torchOn = !torchOn; // reverte
+  torchOn = !torchOn;
   toast('Flash não suportado neste dispositivo.', 'warn');
 }
 
@@ -1187,7 +1168,6 @@ function setStatus(msg) {
 
 function onCodigoLido(code) {
   const campo = document.getElementById('campo-medidor');
-  if (campo.value === code) return;
   campo.value = code;
   campo.classList.add('success');
   setStatus(`✓ Lido: ${code}`);
@@ -1234,8 +1214,6 @@ function registrar() {
   if (!currentTipo) { toast('Selecione Entrada ou Saída.', 'error'); return; }
 
   const registros = getRegistros();
-
-  // Regra de negócio: não permitir mesmo medidor + mesmo tipo
   const duplicado = registros.find(r => r.num === num && r.tipo === currentTipo);
   if (duplicado) {
     document.getElementById('campo-medidor').classList.add('error');
@@ -1243,7 +1221,6 @@ function registrar() {
     return;
   }
 
-  // Bloqueia botão enquanto captura GPS
   const btnReg = document.getElementById('btn-registrar');
   btnReg.disabled = true;
   btnReg.innerHTML = '📍 Capturando GPS...';
@@ -1251,13 +1228,13 @@ function registrar() {
   const salvarComGPS = (gps) => {
     const agora = new Date();
     const novoRegistro = {
-      id: Date.now(),
+      id:      Date.now(),
       num,
-      tipo: currentTipo,
+      tipo:    currentTipo,
       obs,
       gps,
-      data: agora.toLocaleDateString('pt-BR'),
-      hora: agora.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
+      data:    agora.toLocaleDateString('pt-BR'),
+      hora:    agora.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
       tecnico: tecnico?.nome || 'Técnico'
     };
 
@@ -1267,28 +1244,25 @@ function registrar() {
     toast(`✓ ${currentTipo} registrada: ${num}`, 'success');
     if (navigator.vibrate) navigator.vibrate(100);
 
-    // Limpar formulário
     document.getElementById('campo-medidor').value = '';
     document.getElementById('campo-medidor').classList.remove('success', 'error');
     document.getElementById('campo-obs').value = '';
     document.getElementById('campo-hint').textContent = 'Aponte a câmera para o código de barras do medidor.';
     currentTipo = null;
+    lastReadCode = '';
     document.getElementById('tipo-entrada').classList.remove('selected');
     document.getElementById('tipo-saida').classList.remove('selected');
     btnReg.innerHTML = '✓ Registrar';
     btnReg.disabled = true;
-    setStatus('Pronto para próxima bipagem.');
+    setStatus('📷 Pronto para próxima bipagem.');
   };
 
-  // Tenta capturar GPS (timeout 6s — se não conseguir, salva sem)
   if (navigator.geolocation) {
     const gpsTimeout = setTimeout(() => salvarComGPS('Sem GPS'), 6000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(gpsTimeout);
-        const lat = pos.coords.latitude.toFixed(6);
-        const lng = pos.coords.longitude.toFixed(6);
-        salvarComGPS(lat + ',' + lng);
+        salvarComGPS(pos.coords.latitude.toFixed(6) + ',' + pos.coords.longitude.toFixed(6));
       },
       () => { clearTimeout(gpsTimeout); salvarComGPS('Sem GPS'); },
       { timeout: 5000, maximumAge: 30000, enableHighAccuracy: true }
@@ -1313,14 +1287,14 @@ function saveRegistros(arr) {
 
 function renderHistorico() {
   const registros = getRegistros();
-  const filtro = document.getElementById('filtro-tipo')?.value || '';
-  const filtered = filtro ? registros.filter(r => r.tipo === filtro) : registros;
+  const filtro    = document.getElementById('filtro-tipo')?.value || '';
+  const filtered  = filtro ? registros.filter(r => r.tipo === filtro) : registros;
 
   const entradas = registros.filter(r => r.tipo === 'Entrada').length;
-  const saidas = registros.filter(r => r.tipo === 'Saída').length;
+  const saidas   = registros.filter(r => r.tipo === 'Saída').length;
   document.getElementById('stat-entradas').textContent = entradas;
-  document.getElementById('stat-saidas').textContent = saidas;
-  document.getElementById('stat-saldo').textContent = entradas - saidas;
+  document.getElementById('stat-saidas').textContent   = saidas;
+  document.getElementById('stat-saldo').textContent    = entradas - saidas;
 
   const list = document.getElementById('historico-list');
   if (filtered.length === 0) {
@@ -1352,9 +1326,9 @@ function limparHistorico() {
 
 function imprimirRelatorio() {
   const registros = getRegistros();
-  const entradas = registros.filter(r => r.tipo === 'Entrada').length;
-  const saidas = registros.filter(r => r.tipo === 'Saída').length;
-  const agora = new Date().toLocaleString('pt-BR');
+  const entradas  = registros.filter(r => r.tipo === 'Entrada').length;
+  const saidas    = registros.filter(r => r.tipo === 'Saída').length;
+  const agora     = new Date().toLocaleString('pt-BR');
 
   const linhas = registros.map(r => {
     const gpsVal = r.gps && r.gps !== 'Sem GPS'
@@ -1399,7 +1373,6 @@ function imprimirRelatorio() {
 // ══════════════════════════════════════════
 //  UTILS
 // ══════════════════════════════════════════
-// ── JSONP (contorna CORS do Apps Script) ──────────────────────
 function jsonpRequest(url, timeoutMs) {
   return new Promise((resolve, reject) => {
     const cbName = 'mc_cb_' + Date.now();
@@ -1412,24 +1385,13 @@ function jsonpRequest(url, timeoutMs) {
       if (script.parentNode) script.parentNode.removeChild(script);
     };
 
-    window[cbName] = (data) => {
-      cleanup();
-      resolve(data);
-    };
+    window[cbName] = (data) => { cleanup(); resolve(data); };
 
     const timer = setTimeout(() => {
-      if (!done) {
-        cleanup();
-        reject(new Error('Timeout'));
-      }
+      if (!done) { cleanup(); reject(new Error('Timeout')); }
     }, timeoutMs || 8000);
 
-    script.onerror = () => {
-      clearTimeout(timer);
-      cleanup();
-      reject(new Error('Erro de rede'));
-    };
-
+    script.onerror = () => { clearTimeout(timer); cleanup(); reject(new Error('Erro de rede')); };
     script.src = url + '&callback=' + cbName;
     document.head.appendChild(script);
   });
@@ -1445,7 +1407,7 @@ function toast(msg, type = '') {
 
 async function fetchWithTimeout(url, ms) {
   const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(), ms);
+  const id   = setTimeout(() => ctrl.abort(), ms);
   try {
     const r = await fetch(url, { signal: ctrl.signal });
     clearTimeout(id);
