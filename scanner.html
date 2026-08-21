@@ -793,15 +793,19 @@ function saveTecnico(nome, whatsapp) {
 document.getElementById('btn-cadastrar').addEventListener('click', async () => {
   const nome = document.getElementById('cad-nome').value.trim();
   const whats = document.getElementById('cad-whats').value.replace(/\D/g, '');
-  if (!nome) { toast('Informe seu nome.', 'error'); return; }
+  if (nome.length < 5) { toast('Informe seu nome completo.', 'error'); return; }
   if (whats.length < 10) { toast('WhatsApp inválido.', 'error'); return; }
 
   const btn = document.getElementById('btn-cadastrar');
   btn.disabled = true;
-  btn.textContent = 'Verificando...';
+  btn.textContent = 'Entrando...';
 
   tecnico = saveTecnico(nome, whats);
+  // O cadastro é conferido/criado no Google e o app abre nesta mesma tela.
   await verificarLicenca(true);
+
+  btn.disabled = false;
+  btn.textContent = 'Começar a usar';
 });
 
 // ══════════════════════════════════════════
@@ -822,7 +826,8 @@ function normalizarLicenca(raw) {
     if (venc && !Number.isNaN(venc.getTime())) dias = Math.ceil((venc - new Date()) / 86400000);
   }
   let situacao = statusRaw;
-  if (statusRaw === 'BLOQUEADO' || statusRaw === 'BLOQUEADA' || statusRaw === 'INATIVO' || statusRaw === 'INATIVA') situacao = 'BLOQUEADA';
+  if (statusRaw === 'ERRO') situacao = 'BLOQUEADA';
+  else if (statusRaw === 'BLOQUEADO' || statusRaw === 'BLOQUEADA' || statusRaw === 'INATIVO' || statusRaw === 'INATIVA') situacao = 'BLOQUEADA';
   else if (statusRaw === 'EXPIRADO' || statusRaw === 'EXPIRADA' || (dias !== null && dias < 0)) situacao = 'EXPIRADA';
   else if (tipo === 'trial' || statusRaw === 'TRIAL') situacao = 'TRIAL';
   else if (statusRaw === 'ATIVO' || statusRaw === 'ATIVA' || statusRaw === 'OK') situacao = (dias !== null && dias <= 15) ? 'AVISO' : 'ATIVA';
@@ -864,7 +869,7 @@ async function verificarLicenca(isInit = false) {
   hideSplash();
 
   if (!status) {
-    mostrarApp('trial', null);
+    mostrarBloqueio('BLOQUEADA', 'Não foi possível conferir sua licença. Verifique sua conexão e tente novamente.');
     return;
   }
 
