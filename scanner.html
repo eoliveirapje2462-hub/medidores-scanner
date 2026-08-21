@@ -1221,12 +1221,26 @@ function setStatus(msg) {
 
 function onCodigoLido(code) {
   const campo = document.getElementById('campo-medidor');
-  campo.value = code;
+  const numeroMedidor = normalizarCodigoMedidor(code);
+  campo.value = numeroMedidor;
   campo.classList.add('success');
-  setStatus(`✓ Lido: ${code}`);
-  onMedidorInput(code);
-  toast('✓ Código lido: ' + code, 'success');
+  setStatus(`✓ Lido: ${numeroMedidor}`);
+  onMedidorInput(numeroMedidor);
+  toast('✓ Código lido: ' + numeroMedidor, 'success');
   if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+}
+
+// Alguns leitores retornam o identificador técnico ]C1 antes do número do
+// medidor. Exemplo: ]C158938670 vira 5893867-0, como está impresso no aparelho.
+function normalizarCodigoMedidor(code) {
+  let valor = String(code || '').trim().replace(/^\]C1/i, '');
+
+  // O padrão dos medidores é sete números, hífen e dígito verificador.
+  if (/^\d{8}$/.test(valor)) {
+    return valor.slice(0, 7) + '-' + valor.slice(7);
+  }
+
+  return valor;
 }
 
 // ══════════════════════════════════════════
