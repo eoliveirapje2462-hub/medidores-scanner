@@ -454,6 +454,22 @@
   #btn-registrar:active { background: var(--accent-dark); transform: scale(0.98); }
   #btn-registrar:disabled { opacity: 0.5; pointer-events: none; }
 
+  /* ── RECEBIMENTO EM LOTE ── */
+  #lote-container {
+    display: none; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px; margin-bottom: 16px;
+  }
+  #lote-container.show { display: block; }
+  #campo-lote {
+    width: 100%; min-height: 92px; resize: vertical; margin-top: 9px;
+    background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); padding: 10px 12px; font: 14px 'Courier New', monospace;
+  }
+  .lote-info { font-size: 12px; color: var(--text-dim); line-height: 1.45; }
+  .lote-total { color: var(--green); font-size: 15px; font-weight: 700; margin: 10px 0; }
+  .lote-acoes { display: flex; gap: 8px; }
+  .lote-acoes button { margin: 0; }
+
   /* ── TOAST ── */
   #toast {
     position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%);
@@ -667,6 +683,21 @@
         <button class="btn-cam" id="btn-cam-switch" onclick="switchCamera()">🔄 Câmera</button>
         <button class="btn-cam" id="btn-torch" onclick="toggleTorch()">🔦 Flash</button>
       </div>
+
+      <button class="btn-abrir-leitor" id="btn-modo-lote" onclick="alternarModoLote()">📦 Receber medidores em lote</button>
+    </div>
+
+    <div id="lote-container">
+      <div class="resultado-header">📦 Recebimento em lote — Entrada no estoque</div>
+      <p class="lote-info">Com este modo aberto, bipa os medidores um após o outro. Você também pode colar uma lista, com um número por linha.</p>
+      <textarea id="campo-lote" placeholder="Bipe os códigos ou cole aqui:&#10;5893867-0&#10;5893868-1"></textarea>
+      <div class="lote-acoes" style="margin-top:8px;">
+        <button class="btn-cam" onclick="adicionarListaLote()">＋ Adicionar lista</button>
+        <button class="btn-cam" onclick="limparLote()">🗑 Limpar</button>
+      </div>
+      <div class="lote-total" id="lote-total">0 medidores no lote</div>
+      <div class="lote-info" id="lote-itens">Bipe o primeiro medidor para começar.</div>
+      <button id="btn-registrar-lote" onclick="registrarLote()" disabled style="width:100%;margin-top:12px;background:var(--green);color:#fff;border:0;border-radius:var(--radius-sm);font-size:15px;font-weight:700;padding:14px;">✓ Registrar lote como entrada</button>
     </div>
 
     <div id="resultado-container">
@@ -746,6 +777,8 @@ const WHATSAPP_NUM = '5551996554505';
 //  STATE
 // ══════════════════════════════════════════
 let currentTipo = null;
+let modoLote = false;
+let codigosLote = [];
 let cameraActive = false;
 let currentStream = null;
 let useFrontCamera = false;
@@ -1243,6 +1276,12 @@ function setStatus(msg) {
 function onCodigoLido(code) {
   const campo = document.getElementById('campo-medidor');
   const numeroMedidor = normalizarCodigoMedidor(code);
+
+  if (modoLote) {
+    adicionarCodigoLote(numeroMedidor);
+    return;
+  }
+
   campo.value = numeroMedidor;
   campo.classList.add('success');
   setStatus(`✓ Lido: ${numeroMedidor}`);
@@ -1262,6 +1301,105 @@ function normalizarCodigoMedidor(code) {
   }
 
   return valor;
+}
+
+// ══════════════════════════════════════════
+//  RECEBIMENTO EM LOTE — somente entradas no estoque
+// ══════════════════════════════════════════
+function alternarModoLote() {
+  modoLote = !modoLote;
+  document.getElementById('lote-container').classList.toggle('show', modoLote);
+  document.getElementById('btn-modo-lote').textContent = modoLote
+    ? '✕ Fechar recebimento em lote'
+    : '📦 Receber medidores em lote';
+
+  if (modoLote) {
+    setStatus('📦 Modo lote: bipa todos os medidores recebidos.');
+    renderLote();
+  } else {
+    setStatus('📷 Pronto para registrar individualmente.');
+  }
+}
+
+function adicionarCodigoLote(codigo) {
+  const numero = normalizarCodigoMedidor(codigo);
+  if (!numero) return;
+
+  if (codigosLote.includes(numero)) {
+    toast('Este medidor já está neste lote.', 'warn');
+    return;
+  }
+
+  const jaRecebido = getRegistros().some(r => r.num === numero && r.tipo === 'Entrada');
+  if (jaRecebido) {
+    toast('Este medidor já possui entrada registrada.', 'warn');
+    return;
+  }
+
+  codigosLote.push(numero);
+  document.getElementById('campo-lote').value = '';
+  renderLote();
+  setStatus('✓ Lote: ' + codigosLote.length + ' medidor(es)');
+  toast('✓ Adicionado: ' + numero, 'success');
+  if (navigator.vibrate) navigator.vibrate(60);
+}
+
+function adicionarListaLote() {
+  const campo = document.getElementById('campo-lote');
+  const itens = campo.value.split(/[\s,;]+/).filter(Boolean);
+  if (!itens.length) {
+    toast('Bipe ou cole pelo menos um número.', 'warn');
+    return;
+  }
+  itens.forEach(adicionarCodigoLote);
+  campo.value = '';
+}
+
+function renderLote() {
+  const total = codigosLote.length;
+  document.getElementById('lote-total').textContent = total + ' medidor' + (total === 1 ? '' : 'es') + ' no lote';
+  document.getElementById('lote-itens').textContent = total
+    ? codigosLote.slice(-8).join(' · ') + (total > 8 ? ' · ...' : '')
+    : 'Bipe o primeiro medidor para começar.';
+  document.getElementById('btn-registrar-lote').disabled = total === 0;
+}
+
+function limparLote() {
+  if (codigosLote.length && !confirm('Limpar os medidores deste lote?')) return;
+  codigosLote = [];
+  document.getElementById('campo-lote').value = '';
+  renderLote();
+}
+
+function registrarLote() {
+  if (!codigosLote.length) return;
+
+  const registros = getRegistros();
+  const agora = new Date();
+  const data = agora.toLocaleDateString('pt-BR');
+  const hora = agora.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+
+  codigosLote.forEach((num, indice) => {
+    registros.unshift({
+      id: Date.now() + indice,
+      num: num,
+      tipo: 'Entrada',
+      obs: 'Recebimento em lote',
+      gps: 'Recebimento em estoque',
+      data: data,
+      hora: hora,
+      tecnico: tecnico?.nome || 'Técnico'
+    });
+  });
+
+  saveRegistros(registros);
+  const total = codigosLote.length;
+  codigosLote = [];
+  document.getElementById('campo-lote').value = '';
+  renderLote();
+  alternarModoLote();
+  toast('✓ Lote registrado: ' + total + ' medidor(es) em estoque.', 'success');
+  if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
 }
 
 // ══════════════════════════════════════════
