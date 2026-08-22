@@ -256,6 +256,11 @@
   }
   .header-logo-name { font-size: 15px; font-weight: 700; }
   .header-user { font-size: 12px; color: var(--text-muted); }
+  .btn-trocar-cadastro {
+    background: transparent; border: 0; padding: 0; margin-top: 4px;
+    color: var(--accent); font-family: var(--font); font-size: 12px;
+    cursor: pointer;
+  }
   .header-badge {
     font-size: 10px; font-weight: 600; padding: 3px 8px;
     border-radius: 20px; text-transform: uppercase; letter-spacing: 0.05em;
@@ -608,6 +613,7 @@
       📲 Ativar via WhatsApp
     </a>
     <button class="btn-secondary" id="btn-verificar-lic">🔄 Já paguei — verificar</button>
+    <button class="btn-secondary" id="btn-trocar-cadastro" style="margin-top:12px;">👤 Trocar cadastro</button>
   </div>
 </div>
 
@@ -624,6 +630,7 @@
       <span class="header-badge badge-ativa" id="licenca-badge">Ativa</span>
     </div>
     <div class="header-user" id="header-user-name">Técnico</div>
+    <button class="btn-trocar-cadastro" onclick="trocarCadastro()">Trocar cadastro</button>
   </div>
 
   <!-- Tabs -->
@@ -943,6 +950,20 @@ document.getElementById('btn-verificar-lic').addEventListener('click', async () 
   btn.textContent = '🔄 Já paguei — verificar';
   btn.disabled = false;
 });
+
+document.getElementById('btn-trocar-cadastro').addEventListener('click', trocarCadastro);
+
+function trocarCadastro() {
+  if (!confirm('Deseja trocar o nome e WhatsApp cadastrados neste aparelho?')) return;
+
+  stopCamera();
+  localStorage.removeItem('mc_tecnico');
+  localStorage.removeItem('mc_licenca_cache');
+  tecnico = null;
+  document.getElementById('cad-nome').value = '';
+  document.getElementById('cad-whats').value = '';
+  showScreen('screen-cadastro');
+}
 
 function getWhatsappLink(motivo) {
   const msgs = {
