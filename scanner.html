@@ -1555,6 +1555,8 @@ function imprimirRelatorio() {
   const entradas  = registros.filter(r => r.tipo === 'Entrada').length;
   const saidas    = registros.filter(r => r.tipo === 'Saída').length;
   const agora     = new Date().toLocaleString('pt-BR');
+  // O arquivo setup.jpg deve ficar na mesma pasta do scanner.html no GitHub.
+  const logoSetup = new URL('setup.jpg', window.location.href).href;
 
   const linhas = registros.map(r => {
     const gpsVal = r.gps && r.gps !== 'Sem GPS'
@@ -1567,7 +1569,9 @@ function imprimirRelatorio() {
     <html><head><meta charset="UTF-8"><title>Relatório Meter Control</title>
     <style>
       body{font-family:Arial,sans-serif;font-size:12px;margin:20px;}
-      h1{font-size:18px;margin-bottom:4px;}
+      .cabecalho{display:flex;align-items:center;gap:16px;border-bottom:2px solid #0b6b55;padding-bottom:12px;margin-bottom:14px;}
+      .logo-setup{width:92px;height:70px;object-fit:contain;object-position:center;}
+      h1{font-size:18px;margin:0 0 4px;}
       .sub{color:#666;margin-bottom:16px;font-size:11px;}
       table{width:100%;border-collapse:collapse;}
       th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;}
@@ -1576,8 +1580,13 @@ function imprimirRelatorio() {
       .stat{font-size:13px;}
     </style></head>
     <body>
-    <h1>⚡ Meter Control — Relatório</h1>
-    <div class="sub">Gerado em ${agora} · Técnico: ${tecnico?.nome || '-'}</div>
+    <div class="cabecalho">
+      <img class="logo-setup" src="${logoSetup}" alt="Grupo Setup">
+      <div>
+        <h1>Controle de Medidores — Relatório</h1>
+        <div class="sub">Grupo Setup · Gerado em ${agora} · Técnico: ${tecnico?.nome || '-'}</div>
+      </div>
+    </div>
     <div class="summary">
       <span class="stat">📥 Entradas: <strong>${entradas}</strong></span>
       <span class="stat">📤 Saídas: <strong>${saidas}</strong></span>
