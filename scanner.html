@@ -220,20 +220,29 @@
     font-family: var(--font);
   }
 
-  /* ── AVISO DE VENCIMENTO (banner no topo) ── */
+  /* ── BANNER MODO TESTE ── */
   #aviso-banner {
     display: none;
-    background: linear-gradient(135deg, #92400e, #78350f);
-    border-bottom: 1px solid #b45309;
     padding: 12px 16px;
     font-size: 13px;
-    color: #fef3c7;
     line-height: 1.4;
     text-align: center;
+    border-bottom: 1px solid;
   }
   #aviso-banner.show { display: block; }
-  #aviso-banner strong { color: #fde68a; }
-  #aviso-banner a { color: #fde68a; font-weight: 600; }
+  #aviso-banner.modo-teste {
+    background: linear-gradient(135deg, #1e3a5f, #1e2d4a);
+    border-color: #3b82f6;
+    color: #bfdbfe;
+  }
+  #aviso-banner.modo-teste strong { color: #93c5fd; }
+  #aviso-banner.aviso-vencimento {
+    background: linear-gradient(135deg, #92400e, #78350f);
+    border-color: #b45309;
+    color: #fef3c7;
+  }
+  #aviso-banner.aviso-vencimento strong { color: #fde68a; }
+  #aviso-banner.aviso-vencimento a { color: #fde68a; font-weight: 600; }
 
   /* ── HEADER ── */
   .header {
@@ -268,6 +277,7 @@
   .badge-trial { background: var(--yellow-glow); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
   .badge-ativa { background: var(--green-glow); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
   .badge-aviso { background: var(--yellow-glow); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+  .badge-teste { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
 
   /* ── TABS ── */
   .tabs {
@@ -580,7 +590,7 @@
   <div class="spinner"></div>
 </div>
 
-<!-- AVISO DE VENCIMENTO (banner) -->
+<!-- AVISO / BANNER MODO TESTE -->
 <div id="aviso-banner"></div>
 
 <!-- TELA: CADASTRO -->
@@ -773,6 +783,9 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2Hj0Jd79t-45k
 const PIX_KEY = '62676393049';
 const WHATSAPP_NUM = '5551996554505';
 
+// ★ MODO TESTE — mude para false para reativar verificação de licença
+const MODO_TESTE = true;
+
 // ══════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════
@@ -841,7 +854,6 @@ document.getElementById('btn-cadastrar').addEventListener('click', async () => {
   btn.textContent = 'Entrando...';
 
   tecnico = saveTecnico(nome, whats);
-  // O cadastro é conferido/criado no Google e o app abre nesta mesma tela.
   await verificarLicenca(true);
 
   btn.disabled = false;
@@ -851,31 +863,15 @@ document.getElementById('btn-cadastrar').addEventListener('click', async () => {
 // ══════════════════════════════════════════
 //  LICENÇA
 // ══════════════════════════════════════════
-function normalizarLicenca(raw) {
-  const data = raw || {};
-  const statusRaw = String(data.situacao || data.status || '').trim().toUpperCase();
-  const tipo = String(data.tipo || '').trim().toLowerCase();
-  const vencimento = data.vencimento || data.dataVencimento || data.data_vencimento || '';
-  let dias = Number.isFinite(Number(data.diasRestantes)) ? Number(data.diasRestantes) : null;
-  if (dias === null && vencimento) {
-    const partes = String(vencimento).split(/[\/-]/).map(Number);
-    let venc;
-    if (partes.length === 3) {
-      venc = partes[0] > 31 ? new Date(partes[0], partes[1] - 1, partes[2], 23, 59, 59) : new Date(partes[2], partes[1] - 1, partes[0], 23, 59, 59);
-    }
-    if (venc && !Number.isNaN(venc.getTime())) dias = Math.ceil((venc - new Date()) / 86400000);
-  }
-  let situacao = statusRaw;
-  if (statusRaw === 'ERRO') situacao = 'BLOQUEADA';
-  else if (statusRaw === 'BLOQUEADO' || statusRaw === 'BLOQUEADA' || statusRaw === 'INATIVO' || statusRaw === 'INATIVA') situacao = 'BLOQUEADA';
-  else if (statusRaw === 'EXPIRADO' || statusRaw === 'EXPIRADA' || (dias !== null && dias < 0)) situacao = 'EXPIRADA';
-  else if (tipo === 'trial' || statusRaw === 'TRIAL') situacao = 'TRIAL';
-  else if (statusRaw === 'ATIVO' || statusRaw === 'ATIVA' || statusRaw === 'OK') situacao = (dias !== null && dias <= 15) ? 'AVISO' : 'ATIVA';
-  else if (!situacao) situacao = (tipo === 'trial') ? 'TRIAL' : 'ATIVA';
-  return { ...data, situacao, diasRestantes: dias, vencimento };
-}
-
 async function verificarLicenca(isInit = false) {
+  // ★ MODO TESTE — remova este bloco para reativar a verificação de licença
+  if (MODO_TESTE) {
+    hideSplash();
+    mostrarApp('teste', null);
+    return;
+  }
+  // ★ FIM MODO TESTE
+
   localStorage.removeItem('mc_licenca_cache');
   let status = null;
 
@@ -924,6 +920,30 @@ async function verificarLicenca(isInit = false) {
   }
 }
 
+function normalizarLicenca(raw) {
+  const data = raw || {};
+  const statusRaw = String(data.situacao || data.status || '').trim().toUpperCase();
+  const tipo = String(data.tipo || '').trim().toLowerCase();
+  const vencimento = data.vencimento || data.dataVencimento || data.data_vencimento || '';
+  let dias = Number.isFinite(Number(data.diasRestantes)) ? Number(data.diasRestantes) : null;
+  if (dias === null && vencimento) {
+    const partes = String(vencimento).split(/[\/-]/).map(Number);
+    let venc;
+    if (partes.length === 3) {
+      venc = partes[0] > 31 ? new Date(partes[0], partes[1] - 1, partes[2], 23, 59, 59) : new Date(partes[2], partes[1] - 1, partes[0], 23, 59, 59);
+    }
+    if (venc && !Number.isNaN(venc.getTime())) dias = Math.ceil((venc - new Date()) / 86400000);
+  }
+  let situacao = statusRaw;
+  if (statusRaw === 'ERRO') situacao = 'BLOQUEADA';
+  else if (statusRaw === 'BLOQUEADO' || statusRaw === 'BLOQUEADA' || statusRaw === 'INATIVO' || statusRaw === 'INATIVA') situacao = 'BLOQUEADA';
+  else if (statusRaw === 'EXPIRADO' || statusRaw === 'EXPIRADA' || (dias !== null && dias < 0)) situacao = 'EXPIRADA';
+  else if (tipo === 'trial' || statusRaw === 'TRIAL') situacao = 'TRIAL';
+  else if (statusRaw === 'ATIVO' || statusRaw === 'ATIVA' || statusRaw === 'OK') situacao = (dias !== null && dias <= 15) ? 'AVISO' : 'ATIVA';
+  else if (!situacao) situacao = (tipo === 'trial') ? 'TRIAL' : 'ATIVA';
+  return { ...data, situacao, diasRestantes: dias, vencimento };
+}
+
 function mostrarApp(situacao, diasRestantes) {
   showScreen('screen-app');
   document.getElementById('header-user-name').textContent = tecnico ? tecnico.nome : 'Técnico';
@@ -931,22 +951,30 @@ function mostrarApp(situacao, diasRestantes) {
   const badge  = document.getElementById('licenca-badge');
   const banner = document.getElementById('aviso-banner');
 
-  if (situacao === 'trial') {
+  // Limpa classes do banner
+  banner.className = '';
+
+  if (situacao === 'teste') {
+    badge.textContent = '🧪 Teste';
+    badge.className = 'header-badge badge-teste';
+    banner.innerHTML = `🧪 <strong>Modo Teste ativo</strong> — verificação de licença desativada temporariamente.`;
+    banner.classList.add('show', 'modo-teste');
+  } else if (situacao === 'trial') {
     const d = (diasRestantes != null && diasRestantes >= 0) ? diasRestantes : '?';
     badge.textContent = `Trial · ${d}d`;
     badge.className = 'header-badge badge-trial';
     if (typeof d === 'number' && d <= 3) {
       banner.innerHTML = `⏳ Seu trial encerra em <strong>${d} dia(s)</strong>. <a href="${getWhatsappLink('trial')}" target="_blank">Ative sua licença →</a>`;
-      banner.classList.add('show');
+      banner.classList.add('show', 'aviso-vencimento');
     } else if (d === '?') {
       banner.innerHTML = `⏳ Trial ativo. <a href="${getWhatsappLink('trial')}" target="_blank">Ative sua licença →</a>`;
-      banner.classList.add('show');
+      banner.classList.add('show', 'aviso-vencimento');
     }
   } else if (situacao === 'aviso') {
     badge.textContent = `Vence em ${diasRestantes}d`;
     badge.className = 'header-badge badge-aviso';
     banner.innerHTML = `⚠️ Sua licença vence em <strong>${diasRestantes} dia(s)</strong>. <a href="${getWhatsappLink('renovar')}" target="_blank">Renovar agora →</a>`;
-    banner.classList.add('show');
+    banner.classList.add('show', 'aviso-vencimento');
   } else {
     badge.textContent = 'Ativa';
     badge.className = 'header-badge badge-ativa';
@@ -1040,20 +1068,14 @@ function showTab(tab) {
 }
 
 // ══════════════════════════════════════════
-//  SCANNER — CORREÇÃO PRINCIPAL
-//  Usa canvas fixo 1280×720 (não a resolução
-//  real da câmera) e HTMLVideoElementLuminanceSource
-//  para leitura ao vivo sem travar.
+//  SCANNER
 // ══════════════════════════════════════════
-
 function initScanner() {
-  // Canvas de tamanho fixo — independente da resolução da câmera
   scanCanvas        = document.createElement('canvas');
   scanCanvas.width  = SCAN_W;
   scanCanvas.height = SCAN_H;
   scanCtx           = scanCanvas.getContext('2d', { willReadFrequently: true });
 
-  // Não restringe o formato: medidores podem usar padrões diferentes.
   const hints = new Map();
   hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
   zxingReader = new ZXing.MultiFormatReader();
@@ -1066,7 +1088,6 @@ async function startCamera() {
   if (cameraActive) return;
   setStatus('Iniciando câmera...');
   try {
-    // Pede 1280×720 — suficiente para qualquer código de barras
     const constraints = {
       video: {
         facingMode: useFrontCamera ? 'user' : { ideal: 'environment' },
@@ -1078,7 +1099,6 @@ async function startCamera() {
     const video = document.getElementById('preview');
     video.srcObject = currentStream;
     await video.play();
-    // Usa a resolução real entregue pela câmera, sem ampliar artificialmente.
     SCAN_W = video.videoWidth || SCAN_W;
     SCAN_H = video.videoHeight || SCAN_H;
     scanCanvas.width = SCAN_W;
@@ -1098,16 +1118,10 @@ async function startCamera() {
   }
 }
 
-// ──────────────────────────────────────────
-//  AUTO-SCAN a cada 500ms
-//  Desenha o frame no canvas 1280×720 e tenta
-//  decodificar via getImageData — leve e estável.
-// ──────────────────────────────────────────
 let scanBusy = false;
 let nativeBarcodeDetector = null;
 
 async function tentarDecodificar(imgData, w, h) {
-  // Primeiro tenta o leitor nativo do navegador Android, quando disponível.
   if ('BarcodeDetector' in window) {
     try {
       if (!nativeBarcodeDetector) {
@@ -1127,7 +1141,6 @@ async function tentarDecodificar(imgData, w, h) {
     } catch (_) {}
   }
 
-  // Fallback ZXing com dois métodos de binarização.
   const fontes = [ZXing.HybridBinarizer, ZXing.GlobalHistogramBinarizer].filter(Boolean);
   for (const Fonte of fontes) {
     try {
@@ -1290,21 +1303,16 @@ function onCodigoLido(code) {
   if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
 }
 
-// Alguns leitores retornam o identificador técnico ]C1 antes do número do
-// medidor. Exemplo: ]C158938670 vira 5893867-0, como está impresso no aparelho.
 function normalizarCodigoMedidor(code) {
   let valor = String(code || '').trim().replace(/^\]C1/i, '');
-
-  // O padrão dos medidores é sete números, hífen e dígito verificador.
   if (/^\d{8}$/.test(valor)) {
     return valor.slice(0, 7) + '-' + valor.slice(7);
   }
-
   return valor;
 }
 
 // ══════════════════════════════════════════
-//  RECEBIMENTO EM LOTE — somente entradas no estoque
+//  RECEBIMENTO EM LOTE
 // ══════════════════════════════════════════
 function alternarModoLote() {
   modoLote = !modoLote;
@@ -1555,7 +1563,6 @@ function imprimirRelatorio() {
   const entradas  = registros.filter(r => r.tipo === 'Entrada').length;
   const saidas    = registros.filter(r => r.tipo === 'Saída').length;
   const agora     = new Date().toLocaleString('pt-BR');
-  // O arquivo setup.jpg deve ficar na mesma pasta do scanner.html no GitHub.
   const logoSetup = new URL('setup.jpg', window.location.href).href;
 
   const linhas = registros.map(r => {
