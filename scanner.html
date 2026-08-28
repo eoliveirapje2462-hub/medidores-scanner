@@ -259,7 +259,7 @@
     <div class="pix-box">
       <div class="pix-label">PIX — Chave CPF</div>
       <div class="pix-key">62676393049</div>
-      <div class="pix-desc">R$00 ativação · R$00 semestral</div>
+      <div class="pix-desc">R$97 ativação · R$47 semestral</div>
     </div>
     <a id="btn-whats-licenca" class="btn-whatsapp" href="#" target="_blank">📲 Ativar via WhatsApp</a>
     <button class="btn-secondary" id="btn-verificar-lic">🔄 Já paguei — verificar</button>
@@ -390,7 +390,7 @@ const PIX_KEY        = '62676393049';
 const WHATSAPP_NUM   = '5551996554505';
 
 // ★ MODO TESTE — mude para false para reativar verificação de licença
-const MODO_TESTE = false;
+const MODO_TESTE = true;
 
 // ══════════════════════════════════════════
 //  STATE
@@ -616,9 +616,73 @@ function initApp() {
   renderHistorico();
   initScanner();
   atualizarBannerSync();
-  // Tenta sincronizar fila pendente na abertura
-  const fila = getFilaSync();
-  if (fila.length > 0 && navigator.onLine) sincronizarAgora();
+  // Carrega registros da planilha e sincroniza fila pendente
+  if (navigator.onLine) {
+    carregarRegistrosDaNuvem();
+  }
+}
+
+// ══════════════════════════════════════════
+//  CARREGAR REGISTROS DA PLANILHA
+// ══════════════════════════════════════════
+async function carregarRegistrosDaNuvem() {
+  try {
+    const resultado = await jsonpRequest(
+      `${APPS_SCRIPT_URL}?action=buscar&whatsapp=${encodeURIComponent(tecnico?.whatsapp || '')}`,
+      10000
+    );
+
+    if (resultado.status === 'ok' && Array.isArray(resultado.registros)) {
+      const locais = getRegistros();
+      const idsLocais = new Set(locais.map(r => r.id));
+
+      // Mescla: mantém locais + adiciona da nuvem que não existem localmente
+      let novos = 0;
+      resultado.registros.forEach(r => {
+        // Tenta casar pelo número do medidor + tipo + dataHora
+        const jaExiste = locais.some(l =>
+          l.num === r.num && l.tipo === r.tipo &&
+          (l.data + ' ' + l.hora) === r.dataHora
+        );
+        if (!jaExiste) {
+          // Converte formato da nuvem para formato local
+          const partes = String(r.dataHora || '').split(' ');
+          locais.push({
+            id:           r.id,
+            num:          r.num,
+            tipo:         r.tipo,
+            obs:          r.obs,
+            gps:          r.gps,
+            data:         partes[0] || '',
+            hora:         partes[1] || '',
+            tecnico:      r.tecnico,
+            sincronizado: true
+          });
+          novos++;
+        }
+      });
+
+      if (novos > 0) {
+        // Ordena por data/hora mais recente
+        locais.sort((a, b) => {
+          const da = new Date((b.data || '').split('/').reverse().join('-') + 'T' + (b.hora || '00:00'));
+          const db = new Date((a.data || '').split('/').reverse().join('-') + 'T' + (a.hora || '00:00'));
+          return da - db;
+        });
+        saveRegistros(locais);
+        renderHistorico();
+        toast(`☁️ ${novos} registro(s) carregado(s) da planilha.`, 'success');
+      }
+
+      // Depois de carregar, tenta sincronizar fila pendente
+      const fila = getFilaSync();
+      if (fila.length > 0) sincronizarAgora();
+    }
+  } catch (e) {
+    // Sem internet ou erro — tenta só sincronizar fila
+    const fila = getFilaSync();
+    if (fila.length > 0 && navigator.onLine) sincronizarAgora();
+  }
 }
 
 // ══════════════════════════════════════════
