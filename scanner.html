@@ -672,21 +672,47 @@ async function sincronizarAgora() {
   sincronizando = true;
   atualizarBannerSync('sincronizando');
 
-  try {
-    const resultado = await jsonpRequest(
-      `${APPS_SCRIPT_URL}?action=sincronizar&itens=${encodeURIComponent(JSON.stringify(fila))}`,
-      15000
-    );
+  let totalSincronizados = 0;
+  const filaRestante = [...fila];
 
-    if (resultado.status === 'ok') {
-      // Marca todos como sincronizados no histórico local
-      const sincronizados = fila.map(i => i.id);
-      marcarSincronizados(sincronizados);
-      salvarFilaSync([]);
-      atualizarBannerSync('ok');
-      toast(`✓ ${resultado.sincronizados} bipagem(ns) enviada(s) para a planilha.`, 'success');
+  try {
+    // Envia um item por vez para evitar URL muito longa
+    for (let i = 0; i < fila.length; i++) {
+      const item = fila[i];
+      try {
+        const params = new URLSearchParams({
+          action:   'registrar',
+          whatsapp: item.whatsapp  || '',
+          tecnico:  item.tecnico   || '',
+          medidor:  item.medidor   || '',
+          tipo:     item.tipo      || '',
+          obs:      item.obs       || '',
+          gps:      item.gps       || 'Sem GPS',
+          dataHora: item.dataHora  || ''
+        });
+
+        const resultado = await jsonpRequest(
+          `${APPS_SCRIPT_URL}?${params.toString()}`,
+          15000
+        );
+
+        if (resultado.status === 'ok') {
+          marcarSincronizados([item.id]);
+          filaRestante.splice(filaRestante.findIndex(r => r.id === item.id), 1);
+          totalSincronizados++;
+        }
+      } catch (_) {
+        // Se um item falhar continua tentando os próximos
+      }
+    }
+
+    salvarFilaSync(filaRestante);
+
+    if (totalSincronizados > 0) {
+      atualizarBannerSync(filaRestante.length === 0 ? 'ok' : 'pendente');
+      toast(`✓ ${totalSincronizados} bipagem(ns) enviada(s) para a planilha.`, 'success');
       renderHistorico();
-      setTimeout(() => atualizarBannerSync(), 3000);
+      if (filaRestante.length === 0) setTimeout(() => atualizarBannerSync(), 3000);
     } else {
       atualizarBannerSync('pendente');
       toast('Erro ao sincronizar. Tentará novamente em breve.', 'warn');
