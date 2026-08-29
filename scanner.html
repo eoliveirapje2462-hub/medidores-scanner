@@ -560,18 +560,11 @@ function mostrarApp(situacao, diasRestantes) {
     banner.innerHTML = `🧪 <strong>Modo Teste ativo</strong> — verificação de licença desativada temporariamente.`;
     banner.classList.add('show', 'modo-teste');
   } else if (situacao === 'trial') {
-    const d = (diasRestantes != null && diasRestantes >= 0) ? diasRestantes : '?';
-    badge.textContent = `Trial · ${d}d`;
-    badge.className = 'header-badge badge-trial';
-    if (d <= 3 || d === '?') {
-      banner.innerHTML = `⏳ Seu trial encerra em <strong>${d} dia(s)</strong>. <a href="${getWhatsappLink('trial')}" target="_blank">Ative sua licença →</a>`;
-      banner.classList.add('show', 'aviso-vencimento');
-    }
+    badge.textContent = 'Ativa';
+    badge.className = 'header-badge badge-ativa';
   } else if (situacao === 'aviso') {
-    badge.textContent = `Vence em ${diasRestantes}d`;
-    badge.className = 'header-badge badge-aviso';
-    banner.innerHTML = `⚠️ Sua licença vence em <strong>${diasRestantes} dia(s)</strong>. <a href="${getWhatsappLink('renovar')}" target="_blank">Renovar →</a>`;
-    banner.classList.add('show', 'aviso-vencimento');
+    badge.textContent = 'Ativa';
+    badge.className = 'header-badge badge-ativa';
   } else {
     badge.textContent = 'Ativa';
     badge.className = 'header-badge badge-ativa';
