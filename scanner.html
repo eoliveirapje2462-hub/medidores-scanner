@@ -799,7 +799,8 @@ async function sincronizarAgora() {
           tipo:     item.tipo      || '',
           obs:      item.obs       || '',
           gps:      item.gps       || 'Sem GPS',
-          dataHora: item.dataHora  || ''
+          dataHora: item.dataHora  || '',
+          statusVal: ''
         });
 
         const resultado = await jsonpRequest(
@@ -1331,13 +1332,31 @@ function cancelarSelecao() {
 function marcarErroSelecionados() {
   if (!itensSelecionados.size) return;
   const registros = getRegistros();
+
   itensSelecionados.forEach(id => {
     const r = registros.find(r => r.id === id);
-    if (r) r.erro = !r.erro; // toggle
+    if (!r) return;
+    r.erro = !r.erro;
+
+    // Envia atualização de status para a planilha
+    if (navigator.onLine && r.sincronizado) {
+      const statusVal = r.erro ? 'Erro' : '';
+      const params = new URLSearchParams({
+        action:    'atualizarStatus',
+        whatsapp:  tecnico?.whatsapp || '',
+        medidor:   r.num,
+        tipo:      r.tipo,
+        dataHora:  r.data + ' ' + r.hora,
+        statusVal: statusVal
+      });
+      jsonpRequest(`${APPS_SCRIPT_URL}?${params.toString()}`, 8000)
+        .catch(() => {}); // silencioso — não bloqueia o app
+    }
   });
+
   saveRegistros(registros);
   cancelarSelecao();
-  toast('⚠️ Item(ns) marcado(s) como erro.', 'warn');
+  toast('⚠️ Item(ns) marcado(s) como erro na planilha.', 'warn');
 }
 
 function apagarSelecionados() {
