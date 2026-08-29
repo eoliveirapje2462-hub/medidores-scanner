@@ -277,14 +277,11 @@
   <div class="licenca-card">
     <div class="licenca-icon" id="lic-icon">🔒</div>
     <div class="licenca-title" id="lic-title">Acesso bloqueado</div>
-    <div class="licenca-msg" id="lic-msg">Seu período de avaliação encerrou.</div>
-    <div class="pix-box">
-      <div class="pix-label">PIX — Chave CPF</div>
-      <div class="pix-key">62676393049</div>
-      <div class="pix-desc">R$97 ativação · R$47 semestral</div>
-    </div>
-    <a id="btn-whats-licenca" class="btn-whatsapp" href="#" target="_blank">📲 Ativar via WhatsApp</a>
-    <button class="btn-secondary" id="btn-verificar-lic">🔄 Já paguei — verificar</button>
+    <div class="licenca-msg" id="lic-msg">Seu acesso foi suspenso. Entre em contato com o administrador do sistema.</div>
+    <a id="btn-whats-licenca" class="btn-whatsapp" href="#" target="_blank">
+      📲 Falar com o administrador
+    </a>
+    <button class="btn-secondary" id="btn-verificar-lic">🔄 Já regularizei — verificar</button>
     <button class="btn-secondary" id="btn-trocar-cadastro" style="margin-top:12px;">👤 Trocar cadastro</button>
   </div>
 </div>
@@ -603,14 +600,19 @@ function mostrarBloqueio(situacao, mensagem) {
   const icon  = document.getElementById('lic-icon');
   const title = document.getElementById('lic-title');
   const msg   = document.getElementById('lic-msg');
+  const btn   = document.getElementById('btn-whats-licenca');
+
   if (situacao === 'EXPIRADA') {
-    icon.textContent = '⌛'; title.textContent = 'Período encerrado';
-    msg.textContent  = mensagem || 'Seu trial encerrou. Ative sua licença para continuar.';
+    icon.textContent  = '⌛';
+    title.textContent = 'Acesso expirado';
+    msg.textContent   = mensagem || 'Seu período de acesso encerrou. Entre em contato com o administrador para renovar.';
   } else {
-    icon.textContent = '🔒'; title.textContent = 'Acesso bloqueado';
-    msg.textContent  = mensagem || 'Acesso suspenso. Verifique sua licença.';
+    icon.textContent  = '🔒';
+    title.textContent = 'Acesso bloqueado';
+    msg.textContent   = mensagem || 'Seu acesso foi suspenso. Entre em contato com o administrador do sistema.';
   }
-  document.getElementById('btn-whats-licenca').href = getWhatsappLink(situacao === 'EXPIRADA' ? 'ativar' : 'suporte');
+
+  btn.href = getWhatsappLink('suporte');
 }
 
 document.getElementById('btn-verificar-lic').addEventListener('click', async () => {
