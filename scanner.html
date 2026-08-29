@@ -880,6 +880,7 @@ function atualizarBannerSync(estado) {
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'instant' });
 }
 function showTab(tab) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -1152,7 +1153,20 @@ function registrar() {
   if (!num) { toast('Informe o número do medidor.', 'error'); return; }
   if (!currentTipo) { toast('Selecione Entrada ou Saída.', 'error'); return; }
   const registros = getRegistros();
-  if (registros.find(r => r.num === num && r.tipo === currentTipo)) {
+
+  // Bloqueia saída se não houver entrada válida para este medidor
+  if (currentTipo === 'Saída') {
+    const temEntrada = registros.some(r => r.num === num && r.tipo === 'Entrada' && !r.erro);
+    if (!temEntrada) {
+      document.getElementById('campo-medidor').classList.add('error');
+      tocarBip('erro');
+      if (navigator.vibrate) navigator.vibrate([100,50,100,50,100]);
+      toast('❌ Este medidor não tem entrada registrada!', 'error');
+      return;
+    }
+  }
+
+  if (registros.find(r => r.num === num && r.tipo === currentTipo && !r.erro)) {
     document.getElementById('campo-medidor').classList.add('error');
     toast(`❌ Medidor já tem ${currentTipo} registrada!`, 'error');
     tocarBip('erro');
