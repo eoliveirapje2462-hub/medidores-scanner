@@ -224,6 +224,42 @@
     body { background: #fff; color: #000; }
     .screen { padding-bottom: 0; }
   }
+
+  /* ── ESTOQUE ── */
+  .estoque-tipo-btn {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg); border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px 14px;
+    cursor: pointer; font-family: var(--font);
+    transition: all 0.2s; text-align: left; width: 100%;
+  }
+  .estoque-tipo-btn.selected { border-color: var(--accent); background: rgba(59,130,246,0.08); }
+  .estoque-tipo-icon { font-size: 20px; flex-shrink: 0; }
+  .estoque-tipo-nome { font-size: 14px; font-weight: 600; color: var(--text); }
+  .estoque-tipo-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .estoque-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px;
+    position: relative; overflow: hidden;
+  }
+  .estoque-card.alerta { border-color: var(--yellow); }
+  .estoque-card.cheio  { border-color: var(--red); }
+  .estoque-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .estoque-card-nome { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .estoque-card-qtd { font-size: 28px; font-weight: 800; }
+  .estoque-card-qtd.ok     { color: var(--green); }
+  .estoque-card-qtd.alerta { color: var(--yellow); }
+  .estoque-card-qtd.cheio  { color: var(--red); }
+  .estoque-prog-bar { height: 6px; background: var(--border); border-radius: 3px; margin-bottom: 8px; overflow: hidden; }
+  .estoque-prog-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+  .estoque-prog-fill.ok     { background: var(--green); }
+  .estoque-prog-fill.alerta { background: var(--yellow); }
+  .estoque-prog-fill.cheio  { background: var(--red); }
+  .estoque-card-info { display: flex; align-items: center; justify-content: space-between; }
+  .estoque-card-meta { font-size: 11px; color: var(--text-muted); }
+  .estoque-limite-btn { background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--text-muted); font-size: 11px; padding: 4px 10px; cursor: pointer; font-family: var(--font); }
+
 </style>
 </head>
 <body>
@@ -306,6 +342,9 @@
     </button>
     <button class="tab" onclick="showTab('historico')" id="tab-historico">
       <span class="tab-icon">📋</span> Histórico
+    </button>
+    <button class="tab" onclick="showTab('estoque')" id="tab-estoque">
+      <span class="tab-icon">📦</span> Estoque
     </button>
   </div>
 
@@ -405,6 +444,42 @@
     </div>
     <div class="historico-list" id="historico-list"></div>
   </div>
+
+  <!-- Panel: Estoque -->
+  <div class="panel" id="panel-estoque">
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.5;">
+      Selecione o tipo, depois toque em Entrada ou Saída para registrar no seu estoque pessoal.
+    </div>
+
+    <!-- Seleção de tipo -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Selecionar tipo de medidor</div>
+      <div id="estoque-tipos" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <!-- Botões de bipagem -->
+    <div id="estoque-bip-area" style="display:none;background:var(--surface);border:1.5px solid var(--accent);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--accent);" id="estoque-tipo-ativo">—</div>
+          <div style="font-size:11px;color:var(--text-muted);">Tipo selecionado</div>
+        </div>
+        <button onclick="cancelarBipEstoque()" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:12px;padding:6px 12px;cursor:pointer;font-family:var(--font);">✕ Cancelar</button>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="bipEstoque('Entrada')" style="flex:1;background:var(--green-glow);border:1.5px solid var(--green);color:var(--green);border-radius:var(--radius-sm);font-size:15px;font-weight:700;padding:14px;cursor:pointer;font-family:var(--font);">📥 +1 Entrada</button>
+        <button onclick="bipEstoque('Saída')" style="flex:1;background:var(--red-glow);border:1.5px solid var(--red);color:var(--red);border-radius:var(--radius-sm);font-size:15px;font-weight:700;padding:14px;cursor:pointer;font-family:var(--font);">📤 -1 Saída</button>
+      </div>
+      <div style="margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;color:var(--text-dim);text-align:center;" id="estoque-bip-status">
+        Pressione Entrada ou Saída para registrar
+      </div>
+    </div>
+
+    <!-- Cards por tipo -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Estoque atual</div>
+    <div id="estoque-cards" style="display:flex;flex-direction:column;gap:10px;"></div>
+  </div>
+
 </div>
 
 <div id="toast"></div>
@@ -682,6 +757,8 @@ function initApp() {
   initScanner();
   atualizarBannerSync();
   iniciarTimerRelatorio();
+  renderEstoque();
+  verificarAlertasEstoque();
   // Carrega registros da planilha e sincroniza fila pendente
   if (navigator.onLine) {
     carregarRegistrosDaNuvem();
@@ -917,7 +994,9 @@ function showTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('panel-' + tab).classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
-  if (tab === 'historico') { renderHistorico(); stopCamera(); } else { startCamera(); }
+  if (tab === 'historico') { renderHistorico(); stopCamera(); }
+  else if (tab === 'estoque') { renderEstoque(); stopCamera(); }
+  else { startCamera(); }
 }
 
 // ══════════════════════════════════════════
@@ -1511,6 +1590,186 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
+}
+
+// ══════════════════════════════════════════
+//  ESTOQUE — controle por tipo de medidor
+// ══════════════════════════════════════════
+const TIPOS_MEDIDOR = [
+  { id: 'mono',   nome: 'Monofásico',          desc: 'Final 21 — 1 Fase',          icon: '🔵' },
+  { id: 'bi',     nome: 'Bifásico',             desc: 'Final 31 — 2 Fases',         icon: '🟡' },
+  { id: 'tri',    nome: 'Trifásico',            desc: 'Final 23 ou 33 — 3 Fases',   icon: '🔴' },
+  { id: 'solar',  nome: 'Bidirecional Solar',   desc: 'Sufixo L ou -B',             icon: '🟢' },
+  { id: 'ng',     nome: 'Nova Geração',         desc: 'Sufixo -NG',                 icon: '⚪' },
+];
+
+const LIMITE_PADRAO   = 10;
+const ALERTA_MINIMO   = 3;
+
+let tipoEstoqueSelecionado = null;
+
+function getEstoque() {
+  try { return JSON.parse(localStorage.getItem('mc_estoque') || '{}'); } catch { return {}; }
+}
+
+function salvarEstoque(est) {
+  localStorage.setItem('mc_estoque', JSON.stringify(est));
+}
+
+function getLimites() {
+  try { return JSON.parse(localStorage.getItem('mc_estoque_limites') || '{}'); } catch { return {}; }
+}
+
+function salvarLimites(lim) {
+  localStorage.setItem('mc_estoque_limites', JSON.stringify(lim));
+}
+
+function renderEstoque() {
+  const estoque = getEstoque();
+  const limites = getLimites();
+
+  // Botões de seleção de tipo
+  const tiposEl = document.getElementById('estoque-tipos');
+  tiposEl.innerHTML = TIPOS_MEDIDOR.map(t => `
+    <button class="estoque-tipo-btn${tipoEstoqueSelecionado === t.id ? ' selected' : ''}"
+            onclick="selecionarTipoEstoque('${t.id}')">
+      <span class="estoque-tipo-icon">${t.icon}</span>
+      <div>
+        <div class="estoque-tipo-nome">${t.nome}</div>
+        <div class="estoque-tipo-desc">${t.desc}</div>
+      </div>
+    </button>
+  `).join('');
+
+  // Cards de estoque
+  const cardsEl = document.getElementById('estoque-cards');
+  cardsEl.innerHTML = TIPOS_MEDIDOR.map(t => {
+    const qtd    = estoque[t.id] || 0;
+    const limite = limites[t.id] || LIMITE_PADRAO;
+    const pct    = Math.min(100, Math.round((qtd / limite) * 100));
+    const estado = qtd >= limite ? 'cheio' : qtd <= ALERTA_MINIMO ? 'alerta' : 'ok';
+
+    return `
+    <div class="estoque-card ${estado}">
+      <div class="estoque-card-header">
+        <div class="estoque-card-nome">${t.icon} ${t.nome}</div>
+        <div class="estoque-card-qtd ${estado}">${qtd}</div>
+      </div>
+      <div class="estoque-prog-bar">
+        <div class="estoque-prog-fill ${estado}" style="width:${pct}%"></div>
+      </div>
+      <div class="estoque-card-info">
+        <div class="estoque-card-meta">
+          ${estado === 'cheio'  ? '🔴 Limite atingido!' :
+            estado === 'alerta' ? `⚠️ Repor em breve — mínimo ${ALERTA_MINIMO}` :
+            `✓ ${qtd} de ${limite} unidades`}
+        </div>
+        <button class="estoque-limite-btn" onclick="editarLimite('${t.id}')">
+          ✏️ Limite: ${limite}
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selecionarTipoEstoque(id) {
+  tipoEstoqueSelecionado = id;
+  const tipo = TIPOS_MEDIDOR.find(t => t.id === id);
+  document.getElementById('estoque-tipo-ativo').textContent = `${tipo.icon} ${tipo.nome}`;
+  document.getElementById('estoque-bip-area').style.display = 'block';
+  document.getElementById('estoque-bip-status').textContent = 'Pressione Entrada ou Saída para registrar';
+  renderEstoque();
+}
+
+function cancelarBipEstoque() {
+  tipoEstoqueSelecionado = null;
+  document.getElementById('estoque-bip-area').style.display = 'none';
+  renderEstoque();
+}
+
+function bipEstoque(movimento) {
+  if (!tipoEstoqueSelecionado) return;
+
+  const estoque = getEstoque();
+  const limites = getLimites();
+  const qtd     = estoque[tipoEstoqueSelecionado] || 0;
+  const limite  = limites[tipoEstoqueSelecionado] || LIMITE_PADRAO;
+  const tipo    = TIPOS_MEDIDOR.find(t => t.id === tipoEstoqueSelecionado);
+
+  if (movimento === 'Entrada') {
+    if (qtd >= limite) {
+      tocarBip('erro');
+      if (navigator.vibrate) navigator.vibrate([100,50,100]);
+      document.getElementById('estoque-bip-status').textContent = `🔴 Limite de ${limite} unidades atingido!`;
+      document.getElementById('estoque-bip-status').style.color = 'var(--red)';
+      return;
+    }
+    estoque[tipoEstoqueSelecionado] = qtd + 1;
+    tocarBip('ok');
+    if (navigator.vibrate) navigator.vibrate(60);
+    const novaQtd = estoque[tipoEstoqueSelecionado];
+    const status  = novaQtd <= ALERTA_MINIMO
+      ? `⚠️ Atenção: apenas ${novaQtd} unidade(s) — repor em breve!`
+      : `✓ Entrada registrada — ${novaQtd} de ${limite}`;
+    document.getElementById('estoque-bip-status').textContent = status;
+    document.getElementById('estoque-bip-status').style.color = novaQtd <= ALERTA_MINIMO ? 'var(--yellow)' : 'var(--green)';
+
+  } else {
+    if (qtd <= 0) {
+      tocarBip('erro');
+      if (navigator.vibrate) navigator.vibrate([100,50,100]);
+      document.getElementById('estoque-bip-status').textContent = '🔴 Estoque zerado! Não é possível dar saída.';
+      document.getElementById('estoque-bip-status').style.color = 'var(--red)';
+      return;
+    }
+    estoque[tipoEstoqueSelecionado] = qtd - 1;
+    tocarBip('ok');
+    if (navigator.vibrate) navigator.vibrate(60);
+    const novaQtd = estoque[tipoEstoqueSelecionado];
+    const status  = novaQtd <= ALERTA_MINIMO
+      ? `⚠️ Atenção: apenas ${novaQtd} unidade(s) — repor em breve!`
+      : `✓ Saída registrada — ${novaQtd} de ${limite}`;
+    document.getElementById('estoque-bip-status').textContent = status;
+    document.getElementById('estoque-bip-status').style.color = novaQtd <= ALERTA_MINIMO ? 'var(--yellow)' : 'var(--green)';
+  }
+
+  salvarEstoque(estoque);
+  renderEstoque();
+
+  // Alerta de estoque baixo
+  if ((estoque[tipoEstoqueSelecionado] || 0) <= ALERTA_MINIMO && movimento === 'Saída') {
+    toast(`⚠️ ${tipo.nome}: apenas ${estoque[tipoEstoqueSelecionado]} unidade(s)! Repor.`, 'warn');
+  }
+}
+
+function editarLimite(id) {
+  const limites = getLimites();
+  const atual   = limites[id] || LIMITE_PADRAO;
+  const tipo    = TIPOS_MEDIDOR.find(t => t.id === id);
+  const novo    = prompt(`Limite máximo para ${tipo.nome}:`, atual);
+  if (novo === null) return;
+  const val = parseInt(novo, 10);
+  if (isNaN(val) || val < 1) { toast('Valor inválido.', 'error'); return; }
+  limites[id] = val;
+  salvarLimites(limites);
+  renderEstoque();
+  toast(`✓ Limite de ${tipo.nome} atualizado para ${val}.`, 'success');
+}
+
+// Verifica alertas de estoque ao abrir o app
+function verificarAlertasEstoque() {
+  const estoque = getEstoque();
+  const limites = getLimites();
+  const alertas = TIPOS_MEDIDOR.filter(t => {
+    const qtd    = estoque[t.id] || 0;
+    const limite = limites[t.id] || LIMITE_PADRAO;
+    return qtd <= ALERTA_MINIMO && qtd > 0;
+  });
+  if (alertas.length > 0) {
+    setTimeout(() => {
+      toast(`⚠️ Estoque baixo: ${alertas.map(t => t.nome).join(', ')}`, 'warn');
+    }, 3000);
+  }
 }
 
 // ══════════════════════════════════════════
