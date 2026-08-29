@@ -508,12 +508,41 @@ async function verificarLicenca(isInit = false) {
   }
   // ★ FIM MODO TESTE
 
-  localStorage.removeItem('mc_licenca_cache');
   let status = null;
+
+  // Sem internet — usa cache direto sem tentar o servidor
+  if (!navigator.onLine) {
+    const cached = localStorage.getItem('mc_licenca_cache');
+    if (cached) {
+      try {
+        const c = JSON.parse(cached);
+        const ageDias = (Date.now() - (c.cachedAt || 0)) / 86400000;
+        if (ageDias < 7) {
+          status = c;
+        } else {
+          status = { situacao: 'BLOQUEADA', mensagem: 'Sem conexão há mais de 7 dias. Conecte-se para verificar sua licença.' };
+        }
+      } catch {}
+    }
+    hideSplash();
+    if (!status) { mostrarBloqueio('BLOQUEADA', 'Sem conexão. Conecte-se para verificar sua licença.'); return; }
+    const sit = (status.situacao || '').toUpperCase();
+    switch (sit) {
+      case 'ATIVA':     mostrarApp('ativa',  status.diasRestantes); break;
+      case 'TRIAL':     mostrarApp('trial',  status.diasRestantes); break;
+      case 'AVISO':     mostrarApp('aviso',  status.diasRestantes); break;
+      case 'EXPIRADA':
+      case 'BLOQUEADA': mostrarBloqueio(sit, status.mensagem); break;
+      default:          mostrarApp('trial',  status.diasRestantes); break;
+    }
+    return;
+  }
+
+  // Com internet — verifica no servidor
   try {
     status = await jsonpRequest(
       `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`,
-      8000
+      12000
     );
     status = normalizarLicenca(status);
     if (status.situacao === 'BLOQUEADA' || status.situacao === 'EXPIRADA') {
@@ -522,18 +551,19 @@ async function verificarLicenca(isInit = false) {
       localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...status, cachedAt: Date.now() }));
     }
   } catch (e) {
+    // Timeout ou erro de rede — tenta cache
     const cached = localStorage.getItem('mc_licenca_cache');
     if (cached) {
       try {
         const c = JSON.parse(cached);
         const ageDias = (Date.now() - (c.cachedAt || 0)) / 86400000;
-        status = ageDias < 3 ? c : { situacao: 'BLOQUEADA', mensagem: 'Sem conexão há mais de 3 dias.' };
+        status = ageDias < 7 ? c : { situacao: 'BLOQUEADA', mensagem: 'Sem conexão há mais de 7 dias.' };
       } catch {}
     }
   }
 
   hideSplash();
-  if (!status) { mostrarBloqueio('BLOQUEADA', 'Não foi possível verificar sua licença.'); return; }
+  if (!status) { mostrarBloqueio('BLOQUEADA', 'Não foi possível verificar sua licença. Verifique sua conexão.'); return; }
 
   const sit = (status.situacao || '').toUpperCase();
   switch (sit) {
@@ -1535,11 +1565,23 @@ let relatorioTimer = null;
 function iniciarTimerRelatorio() {
   if (relatorioTimer) clearTimeout(relatorioTimer);
 
-  const agora     = new Date();
-  const alvo      = new Date();
-  alvo.setHours(18, 0, 0, 0);
+  const agora = new Date();
+  const hora  = agora.getHours();
+  const hoje  = agora.toLocaleDateString('pt-BR');
+  const ultimoEnvio = localStorage.getItem('mc_ultimo_relatorio');
 
-  // Se já passou das 18h hoje, agenda para amanhã
+  // Se já passou das 18h e ainda não enviou hoje → mostra na hora
+  if (hora >= 18 && ultimoEnvio !== hoje) {
+    const registros = getRegistros().filter(r => r.data === hoje);
+    if (registros.length > 0) {
+      setTimeout(() => dispararRelatorio(), 2000); // pequeno delay para o app carregar
+      return;
+    }
+  }
+
+  // Agenda para as 18h do dia atual ou próximo
+  const alvo = new Date();
+  alvo.setHours(18, 0, 0, 0);
   if (agora >= alvo) alvo.setDate(alvo.getDate() + 1);
 
   const ms = alvo.getTime() - agora.getTime();
@@ -1548,8 +1590,6 @@ function iniciarTimerRelatorio() {
     // Reagenda para o próximo dia
     relatorioTimer = setTimeout(() => iniciarTimerRelatorio(), 60000);
   }, ms);
-
-  console.log(`Relatório agendado em ${Math.round(ms/60000)} minutos.`);
 }
 
 function gerarTextoRelatorio() {
