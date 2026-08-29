@@ -1021,6 +1021,7 @@ function onCodigoLido(code) {
   setStatus(`✓ Lido: ${numeroMedidor}`);
   onMedidorInput(numeroMedidor);
   toast('✓ Código lido: ' + numeroMedidor, 'success');
+  tocarBip('ok');
   if (navigator.vibrate) navigator.vibrate([60,30,60]);
 }
 
@@ -1051,6 +1052,7 @@ function adicionarCodigoLote(codigo) {
   renderLote();
   setStatus('✓ Lote: ' + codigosLote.length + ' medidor(es)');
   toast('✓ Adicionado: ' + numero, 'success');
+  tocarBip('lote');
   if (navigator.vibrate) navigator.vibrate(60);
 }
 
@@ -1133,6 +1135,8 @@ function registrar() {
   if (registros.find(r => r.num === num && r.tipo === currentTipo)) {
     document.getElementById('campo-medidor').classList.add('error');
     toast(`❌ Medidor já tem ${currentTipo} registrada!`, 'error');
+    tocarBip('erro');
+    if (navigator.vibrate) navigator.vibrate([100,50,100,50,100]);
     return;
   }
 
@@ -1312,7 +1316,51 @@ if ('serviceWorker' in navigator) {
 }
 
 // ══════════════════════════════════════════
-//  RELATÓRIO DIÁRIO — WhatsApp às 18h
+//  SOM DE BIP — feedback sonoro ao escanear
+// ══════════════════════════════════════════
+function tocarBip(tipo = 'ok') {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (tipo === 'ok') {
+      // Bip curto e agudo — leitura ok
+      osc.frequency.setValueAtTime(1200, ctx.currentTime);
+      osc.frequency.setValueAtTime(1600, ctx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.15);
+    } else if (tipo === 'erro') {
+      // Bip grave duplo — erro/duplicado
+      osc.frequency.setValueAtTime(300, ctx.currentTime);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    } else if (tipo === 'lote') {
+      // Dois bips curtos — adicionado ao lote
+      osc.frequency.setValueAtTime(1000, ctx.currentTime);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.08);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.frequency.setValueAtTime(1400, ctx.currentTime + 0.12);
+      gain2.gain.setValueAtTime(0.2, ctx.currentTime + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+      osc2.start(ctx.currentTime + 0.12);
+      osc2.stop(ctx.currentTime + 0.22);
+    }
+  } catch (_) {}
+}
 // ══════════════════════════════════════════
 let relatorioTimer = null;
 
