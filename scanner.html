@@ -349,6 +349,16 @@
   </div>
 
   <div class="panel active" id="panel-registrar">
+
+    <!-- Banner contexto estoque -->
+    <div id="estoque-contexto-banner" style="display:none;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;display:none;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#93c5fd;" id="estoque-ctx-texto">📦 Modo estoque ativo</div>
+        <div style="font-size:11px;color:var(--text-muted);">Bipe o medidor — o estoque será atualizado automaticamente</div>
+      </div>
+      <button onclick="cancelarContextoEstoque()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;padding:4px;">✕</button>
+    </div>
+
     <div style="margin-bottom:14px;">
       <button class="btn-abrir-leitor" onclick="abrirLeitor()">📷 Abrir leitor de código</button>
       <div class="scanner-wrap">
@@ -1303,6 +1313,28 @@ function registrar() {
     registros.unshift(novoRegistro);
     saveRegistros(registros);
 
+    // Se veio do estoque, atualiza a quantidade
+    if (window._estoqueContexto) {
+      const ctx     = window._estoqueContexto;
+      const estoque = getEstoque();
+      const limites = getLimites();
+      const qtd     = estoque[ctx.tipoId] || 0;
+      const limite  = limites[ctx.tipoId] || LIMITE_PADRAO;
+
+      if (ctx.movimento === 'Entrada') {
+        estoque[ctx.tipoId] = qtd + 1;
+      } else {
+        estoque[ctx.tipoId] = Math.max(0, qtd - 1);
+      }
+      salvarEstoque(estoque);
+
+      const novaQtd = estoque[ctx.tipoId];
+      if (novaQtd <= ALERTA_MINIMO) {
+        setTimeout(() => toast(`⚠️ ${ctx.tipoNome}: apenas ${novaQtd} unidade(s)! Repor em breve.`, 'warn'), 1500);
+      }
+      window._estoqueContexto = null;
+    }
+
     // Adiciona na fila de sync e tenta enviar
     adicionarNaFila(novoRegistro);
     if (navigator.onLine) sincronizarAgora();
@@ -1681,10 +1713,26 @@ function selecionarTipoEstoque(id) {
   renderEstoque();
 }
 
-function cancelarBipEstoque() {
-  tipoEstoqueSelecionado = null;
-  document.getElementById('estoque-bip-area').style.display = 'none';
-  renderEstoque();
+function cancelarContextoEstoque() {
+  window._estoqueContexto = null;
+  document.getElementById('estoque-contexto-banner').style.display = 'none';
+  currentTipo = null;
+  document.getElementById('tipo-entrada').classList.remove('selected');
+  document.getElementById('tipo-saida').classList.remove('selected');
+  updateBtnRegistrar();
+  setStatus('📷 Aponte para o código e pressione Capturar');
+}
+
+function atualizarBannerEstoque() {
+  const banner = document.getElementById('estoque-contexto-banner');
+  if (window._estoqueContexto) {
+    const ctx = window._estoqueContexto;
+    document.getElementById('estoque-ctx-texto').textContent =
+      `📦 Estoque ${ctx.tipoNome} — ${ctx.movimento}`;
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
 }
 
 function bipEstoque(movimento) {
@@ -1696,50 +1744,35 @@ function bipEstoque(movimento) {
   const limite  = limites[tipoEstoqueSelecionado] || LIMITE_PADRAO;
   const tipo    = TIPOS_MEDIDOR.find(t => t.id === tipoEstoqueSelecionado);
 
-  if (movimento === 'Entrada') {
-    if (qtd >= limite) {
-      tocarBip('erro');
-      if (navigator.vibrate) navigator.vibrate([100,50,100]);
-      document.getElementById('estoque-bip-status').textContent = `🔴 Limite de ${limite} unidades atingido!`;
-      document.getElementById('estoque-bip-status').style.color = 'var(--red)';
-      return;
-    }
-    estoque[tipoEstoqueSelecionado] = qtd + 1;
-    tocarBip('ok');
-    if (navigator.vibrate) navigator.vibrate(60);
-    const novaQtd = estoque[tipoEstoqueSelecionado];
-    const status  = novaQtd <= ALERTA_MINIMO
-      ? `⚠️ Atenção: apenas ${novaQtd} unidade(s) — repor em breve!`
-      : `✓ Entrada registrada — ${novaQtd} de ${limite}`;
-    document.getElementById('estoque-bip-status').textContent = status;
-    document.getElementById('estoque-bip-status').style.color = novaQtd <= ALERTA_MINIMO ? 'var(--yellow)' : 'var(--green)';
-
-  } else {
-    if (qtd <= 0) {
-      tocarBip('erro');
-      if (navigator.vibrate) navigator.vibrate([100,50,100]);
-      document.getElementById('estoque-bip-status').textContent = '🔴 Estoque zerado! Não é possível dar saída.';
-      document.getElementById('estoque-bip-status').style.color = 'var(--red)';
-      return;
-    }
-    estoque[tipoEstoqueSelecionado] = qtd - 1;
-    tocarBip('ok');
-    if (navigator.vibrate) navigator.vibrate(60);
-    const novaQtd = estoque[tipoEstoqueSelecionado];
-    const status  = novaQtd <= ALERTA_MINIMO
-      ? `⚠️ Atenção: apenas ${novaQtd} unidade(s) — repor em breve!`
-      : `✓ Saída registrada — ${novaQtd} de ${limite}`;
-    document.getElementById('estoque-bip-status').textContent = status;
-    document.getElementById('estoque-bip-status').style.color = novaQtd <= ALERTA_MINIMO ? 'var(--yellow)' : 'var(--green)';
+  // Verifica limites antes de ir para o scanner
+  if (movimento === 'Entrada' && qtd >= limite) {
+    tocarBip('erro');
+    if (navigator.vibrate) navigator.vibrate([100,50,100]);
+    document.getElementById('estoque-bip-status').textContent = `🔴 Limite de ${limite} unidades atingido!`;
+    document.getElementById('estoque-bip-status').style.color = 'var(--red)';
+    return;
+  }
+  if (movimento === 'Saída' && qtd <= 0) {
+    tocarBip('erro');
+    if (navigator.vibrate) navigator.vibrate([100,50,100]);
+    document.getElementById('estoque-bip-status').textContent = '🔴 Estoque zerado! Não é possível dar saída.';
+    document.getElementById('estoque-bip-status').style.color = 'var(--red)';
+    return;
   }
 
-  salvarEstoque(estoque);
-  renderEstoque();
+  // Salva contexto do estoque para usar após leitura do scanner
+  window._estoqueContexto = {
+    tipoId:    tipoEstoqueSelecionado,
+    tipoNome:  tipo.nome,
+    movimento: movimento
+  };
 
-  // Alerta de estoque baixo
-  if ((estoque[tipoEstoqueSelecionado] || 0) <= ALERTA_MINIMO && movimento === 'Saída') {
-    toast(`⚠️ ${tipo.nome}: apenas ${estoque[tipoEstoqueSelecionado]} unidade(s)! Repor.`, 'warn');
-  }
+  // Vai para aba Registrar com o tipo já selecionado
+  showTab('registrar');
+  selectTipo(movimento);
+  atualizarBannerEstoque();
+  setStatus(`📦 Estoque ${tipo.nome} — Bipe o medidor para registrar ${movimento}`);
+  toast(`📦 Bipe o medidor para ${movimento} do estoque ${tipo.nome}`, 'success');
 }
 
 function editarLimite(id) {
