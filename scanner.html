@@ -185,10 +185,17 @@
   .stat-val.blue { color: var(--accent); }
   .stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
   .historico-list { display: flex; flex-direction: column; gap: 8px; }
-  .hist-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+  .hist-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; display: flex; align-items: center; gap: 12px; transition: border-color 0.2s, background 0.2s; position: relative; user-select: none; }
+  .hist-item.selecionado { border-color: var(--accent); background: rgba(59,130,246,0.08); }
+  .hist-item.erro { border-color: var(--red); background: rgba(239,68,68,0.07); opacity: 0.75; }
+  .hist-item.erro .hist-num { text-decoration: line-through; color: var(--text-muted); }
+  .hist-check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); display: none; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; transition: all 0.2s; }
+  .modo-selecao .hist-check { display: flex; }
+  .hist-item.selecionado .hist-check { background: var(--accent); border-color: var(--accent); color: #fff; }
   .hist-tipo-badge { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
   .hist-tipo-badge.entrada { background: var(--green-glow); }
   .hist-tipo-badge.saida { background: var(--red-glow); }
+  .hist-tipo-badge.erro-badge { background: var(--red-glow); }
   .hist-info { flex: 1; min-width: 0; }
   .hist-num { font-size: 14px; font-weight: 700; font-family: 'Courier New', monospace; letter-spacing: 0.05em; }
   .hist-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
@@ -201,6 +208,16 @@
   .hist-filter { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: 13px; padding: 9px 12px; font-family: var(--font); outline: none; cursor: pointer; }
   .btn-clear-hist { background: var(--red-glow); border: 1px solid rgba(239,68,68,0.3); color: var(--red); border-radius: var(--radius-sm); font-size: 13px; padding: 9px 14px; cursor: pointer; font-family: var(--font); }
   .btn-print { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius-sm); font-size: 14px; padding: 12px; cursor: pointer; font-family: var(--font); margin-bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+  /* Barra de seleção */
+  #barra-selecao { display: none; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 10px; align-items: center; justify-content: space-between; gap: 8px; }
+  #barra-selecao.show { display: flex; }
+  .sel-info { font-size: 13px; color: var(--text-dim); }
+  .sel-acoes { display: flex; gap: 8px; }
+  .btn-sel { padding: 7px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font); border: none; }
+  .btn-sel-erro { background: var(--yellow-glow); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+  .btn-sel-apagar { background: var(--red-glow); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+  .btn-sel-cancel { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); }
 
   @media print {
     .bottom-nav,.tabs,.header,#aviso-banner,#sync-banner,.scanner-controls,.tipo-toggle,.obs-wrap,#btn-registrar,.btn-print,.hist-controls,.btn-clear-hist { display: none !important; }
@@ -379,6 +396,15 @@
       📲 Enviar relatório do dia via WhatsApp
     </button>
     <div class="hist-controls" style="display:none">
+    </div>
+    <!-- Barra de seleção -->
+    <div id="barra-selecao">
+      <span class="sel-info" id="sel-info">0 selecionados</span>
+      <div class="sel-acoes">
+        <button class="btn-sel btn-sel-erro" onclick="marcarErroSelecionados()">⚠️ Erro</button>
+        <button class="btn-sel btn-sel-apagar" onclick="apagarSelecionados()">🗑 Apagar</button>
+        <button class="btn-sel btn-sel-cancel" onclick="cancelarSelecao()">✕</button>
+      </div>
     </div>
     <div class="historico-list" id="historico-list"></div>
   </div>
@@ -636,7 +662,7 @@ function initApp() {
 async function carregarRegistrosDaNuvem() {
   try {
     const resultado = await jsonpRequest(
-      `${APPS_SCRIPT_URL}?action=buscar&whatsapp=${encodeURIComponent(tecnico?.whatsapp || '')}`,
+      `${APPS_SCRIPT_URL}?action=buscar&whatsapp=${encodeURIComponent(tecnico?.whatsapp || '')}&dias=30`,
       10000
     );
 
@@ -1191,24 +1217,50 @@ function getRegistros() {
 }
 function saveRegistros(arr) { localStorage.setItem('mc_registros', JSON.stringify(arr)); }
 
+// ══════════════════════════════════════════
+//  HISTÓRICO — seleção e ações
+// ══════════════════════════════════════════
+let itensSelecionados = new Set();
+let modoSelecao = false;
+
 function renderHistorico() {
   const registros = getRegistros();
   const filtro    = document.getElementById('filtro-tipo')?.value || '';
   const filtered  = filtro ? registros.filter(r => r.tipo === filtro) : registros;
-  const entradas  = registros.filter(r => r.tipo === 'Entrada').length;
-  const saidas    = registros.filter(r => r.tipo === 'Saída').length;
+
+  // Stats só dos não-erro
+  const validos  = registros.filter(r => !r.erro);
+  const entradas = validos.filter(r => r.tipo === 'Entrada').length;
+  const saidas   = validos.filter(r => r.tipo === 'Saída').length;
   document.getElementById('stat-entradas').textContent = entradas;
   document.getElementById('stat-saidas').textContent   = saidas;
   document.getElementById('stat-saldo').textContent    = entradas - saidas;
 
   const list = document.getElementById('historico-list');
-  if (filtered.length === 0) { list.innerHTML = '<div class="hist-empty">📭 Nenhum registro encontrado.</div>'; return; }
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="hist-empty">📭 Nenhum registro encontrado.</div>';
+    return;
+  }
 
-  list.innerHTML = filtered.map(r => `
-    <div class="hist-item">
-      <div class="hist-tipo-badge ${r.tipo === 'Entrada' ? 'entrada' : 'saida'}">${r.tipo === 'Entrada' ? '📥' : '📤'}</div>
+  list.className = 'historico-list' + (modoSelecao ? ' modo-selecao' : '');
+
+  list.innerHTML = filtered.map(r => {
+    const selecionado = itensSelecionados.has(r.id);
+    const isErro = r.erro;
+    const badgeClass = isErro ? 'erro-badge' : (r.tipo === 'Entrada' ? 'entrada' : 'saida');
+    const badgeIcon  = isErro ? '⚠️' : (r.tipo === 'Entrada' ? '📥' : '📤');
+    return `
+    <div class="hist-item${selecionado ? ' selecionado' : ''}${isErro ? ' erro' : ''}"
+         data-id="${r.id}"
+         onclick="onHistItemClick(${r.id})"
+         oncontextmenu="onHistItemLongPress(event, ${r.id})"
+         ontouchstart="iniciarLongPress(${r.id})"
+         ontouchend="cancelarLongPressTimer()"
+         ontouchmove="cancelarLongPressTimer()">
+      <div class="hist-check">${selecionado ? '✓' : ''}</div>
+      <div class="hist-tipo-badge ${badgeClass}">${badgeIcon}</div>
       <div class="hist-info">
-        <div class="hist-num">${r.num}</div>
+        <div class="hist-num">${r.num}${isErro ? ' <span style="color:var(--red);font-size:10px;font-family:sans-serif;">ERRO</span>' : ''}</div>
         <div class="hist-meta">${r.tipo} · ${r.data} ${r.hora} · ${r.tecnico}</div>
         ${r.gps && r.gps !== 'Sem GPS' ? `<div class="hist-obs">📍 ${r.gps}</div>` : ''}
         ${r.obs ? `<div class="hist-obs">${r.obs}</div>` : ''}
@@ -1216,17 +1268,107 @@ function renderHistorico() {
           ${r.sincronizado ? '☁️ Salvo na planilha' : '⏳ Aguardando envio'}
         </div>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+}
+
+// ── Long press (segurar) para entrar no modo seleção ──
+let longPressTimer = null;
+function iniciarLongPress(id) {
+  longPressTimer = setTimeout(() => {
+    if (navigator.vibrate) navigator.vibrate(60);
+    entrarModoSelecao(id);
+  }, 600);
+}
+function cancelarLongPressTimer() {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+}
+
+function onHistItemClick(id) {
+  cancelarLongPressTimer();
+  if (modoSelecao) {
+    toggleSelecao(id);
+  }
+}
+function onHistItemLongPress(e, id) {
+  e.preventDefault();
+  entrarModoSelecao(id);
+}
+
+function entrarModoSelecao(id) {
+  modoSelecao = true;
+  itensSelecionados = new Set([id]);
+  atualizarBarraSelecao();
+  renderHistorico();
+}
+
+function toggleSelecao(id) {
+  if (itensSelecionados.has(id)) {
+    itensSelecionados.delete(id);
+  } else {
+    itensSelecionados.add(id);
+  }
+  if (itensSelecionados.size === 0) {
+    cancelarSelecao();
+    return;
+  }
+  atualizarBarraSelecao();
+  renderHistorico();
+}
+
+function atualizarBarraSelecao() {
+  const barra = document.getElementById('barra-selecao');
+  const info  = document.getElementById('sel-info');
+  barra.classList.toggle('show', modoSelecao && itensSelecionados.size > 0);
+  info.textContent = `${itensSelecionados.size} selecionado(s)`;
+}
+
+function cancelarSelecao() {
+  modoSelecao = false;
+  itensSelecionados.clear();
+  document.getElementById('barra-selecao').classList.remove('show');
+  renderHistorico();
+}
+
+function marcarErroSelecionados() {
+  if (!itensSelecionados.size) return;
+  const registros = getRegistros();
+  itensSelecionados.forEach(id => {
+    const r = registros.find(r => r.id === id);
+    if (r) r.erro = !r.erro; // toggle
+  });
+  saveRegistros(registros);
+  cancelarSelecao();
+  toast('⚠️ Item(ns) marcado(s) como erro.', 'warn');
+}
+
+function apagarSelecionados() {
+  if (!itensSelecionados.size) return;
+  if (!confirm(`Apagar ${itensSelecionados.size} item(ns) do celular?\n\nOs registros permanecem na planilha.`)) return;
+  let registros = getRegistros();
+  // Remove da fila de sync também
+  let fila = getFilaSync();
+  itensSelecionados.forEach(id => {
+    registros = registros.filter(r => r.id !== id);
+    fila      = fila.filter(f => f.id !== id);
+  });
+  saveRegistros(registros);
+  salvarFilaSync(fila);
+  cancelarSelecao();
+  atualizarBannerSync();
+  toast('🗑 Item(ns) apagado(s) do celular.', 'warn');
 }
 
 function limparHistorico() {
-  if (!confirm('Apagar todo o histórico deste dispositivo?')) return;
+  if (!confirm('Apagar TODO o histórico deste dispositivo?\n\nOs registros permanecem na planilha.')) return;
   localStorage.removeItem('mc_registros');
   localStorage.removeItem('mc_fila_sync');
+  itensSelecionados.clear();
+  modoSelecao = false;
+  document.getElementById('barra-selecao').classList.remove('show');
   renderHistorico();
   atualizarBannerSync();
-  toast('Histórico apagado.', 'warn');
+  toast('Histórico apagado do celular.', 'warn');
 }
 
 function imprimirRelatorio() {
