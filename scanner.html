@@ -371,6 +371,15 @@
       <button class="btn-print" style="flex:1;margin:0;" onclick="imprimirRelatorio()">🖨 Imprimir</button>
       <button class="btn-clear-hist" onclick="limparHistorico()">🗑</button>
     </div>
+    <button onclick="enviarRelatorioManual()" style="
+      width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
+      background:#25d366;color:#fff;border:none;border-radius:var(--radius-sm);
+      font-size:14px;font-weight:600;padding:13px;cursor:pointer;
+      font-family:var(--font);margin-bottom:14px;">
+      📲 Enviar relatório do dia via WhatsApp
+    </button>
+    <div class="hist-controls" style="display:none">
+    </div>
     <div class="historico-list" id="historico-list"></div>
   </div>
 </div>
@@ -621,6 +630,7 @@ function initApp() {
   renderHistorico();
   initScanner();
   atualizarBannerSync();
+  iniciarTimerRelatorio();
   // Carrega registros da planilha e sincroniza fila pendente
   if (navigator.onLine) {
     carregarRegistrosDaNuvem();
@@ -1299,6 +1309,160 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
+}
+
+// ══════════════════════════════════════════
+//  RELATÓRIO DIÁRIO — WhatsApp às 18h
+// ══════════════════════════════════════════
+let relatorioTimer = null;
+
+function iniciarTimerRelatorio() {
+  if (relatorioTimer) clearTimeout(relatorioTimer);
+
+  const agora     = new Date();
+  const alvo      = new Date();
+  alvo.setHours(18, 0, 0, 0);
+
+  // Se já passou das 18h hoje, agenda para amanhã
+  if (agora >= alvo) alvo.setDate(alvo.getDate() + 1);
+
+  const ms = alvo.getTime() - agora.getTime();
+  relatorioTimer = setTimeout(() => {
+    dispararRelatorio();
+    // Reagenda para o próximo dia
+    relatorioTimer = setTimeout(() => iniciarTimerRelatorio(), 60000);
+  }, ms);
+
+  console.log(`Relatório agendado em ${Math.round(ms/60000)} minutos.`);
+}
+
+function gerarTextoRelatorio() {
+  const hoje      = new Date().toLocaleDateString('pt-BR');
+  const registros = getRegistros().filter(r => r.data === hoje);
+
+  if (registros.length === 0) return null;
+
+  const entradas = registros.filter(r => r.tipo === 'Entrada');
+  const saidas   = registros.filter(r => r.tipo === 'Saída');
+  const saldo    = entradas.length - saidas.length;
+
+  const formatarItem = r =>
+    `• ${r.num} — ${r.hora}${r.obs ? ' — ' + r.obs : ''}`;
+
+  let texto = `📋 *Relatório do Dia — Meter Control*\n`;
+  texto    += `👤 ${tecnico?.nome || 'Técnico'}\n`;
+  texto    += `📅 ${hoje}\n\n`;
+
+  if (entradas.length > 0) {
+    texto += `📥 *Entradas: ${entradas.length}*\n`;
+    texto += entradas.map(formatarItem).join('\n') + '\n\n';
+  }
+
+  if (saidas.length > 0) {
+    texto += `📤 *Saídas: ${saidas.length}*\n`;
+    texto += saidas.map(formatarItem).join('\n') + '\n\n';
+  }
+
+  texto += `📊 *Saldo do dia: ${saldo >= 0 ? '+' : ''}${saldo}*\n`;
+  texto += `\n_Enviado via Meter Control · Grupo Setup_`;
+
+  return texto;
+}
+
+function dispararRelatorio() {
+  const hoje      = new Date().toLocaleDateString('pt-BR');
+  const registros = getRegistros().filter(r => r.data === hoje);
+
+  if (registros.length === 0) return; // Sem bips hoje, não envia
+
+  // Verifica se já enviou hoje
+  const ultimoEnvio = localStorage.getItem('mc_ultimo_relatorio');
+  if (ultimoEnvio === hoje) return;
+
+  const texto = gerarTextoRelatorio();
+  if (!texto) return;
+
+  // Mostra notificação/modal para o técnico enviar
+  mostrarModalRelatorio(texto, hoje);
+}
+
+function mostrarModalRelatorio(texto, hoje) {
+  // Cria modal se não existir
+  let modal = document.getElementById('modal-relatorio');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-relatorio';
+    modal.style.cssText = `
+      position:fixed;inset:0;z-index:500;
+      background:rgba(0,0,0,0.85);
+      display:flex;align-items:flex-end;justify-content:center;
+      padding:16px;
+    `;
+    modal.innerHTML = `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:20px;
+                  padding:24px 20px;width:100%;max-width:420px;margin-bottom:8px;">
+        <div style="font-size:18px;font-weight:700;margin-bottom:6px;">📋 Relatório do dia pronto!</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px;line-height:1.5;">
+          Seu relatório de hoje está pronto. Toque em enviar para abrir o WhatsApp com a mensagem já preenchida.
+        </div>
+        <div id="relatorio-preview" style="
+          background:var(--bg);border:1px solid var(--border);border-radius:10px;
+          padding:12px;font-size:12px;color:var(--text-dim);
+          white-space:pre-wrap;max-height:180px;overflow-y:auto;
+          font-family:'Courier New',monospace;margin-bottom:16px;line-height:1.5;
+        "></div>
+        <a id="btn-enviar-relatorio" href="#" target="_blank" style="
+          display:flex;align-items:center;justify-content:center;gap:8px;
+          width:100%;background:#25d366;color:#fff;border:none;border-radius:10px;
+          font-size:15px;font-weight:600;padding:14px;cursor:pointer;
+          text-decoration:none;font-family:var(--font);margin-bottom:10px;
+        ">📲 Enviar via WhatsApp</a>
+        <button onclick="fecharModalRelatorio(true)" style="
+          width:100%;background:transparent;color:var(--text-muted);border:none;
+          font-size:13px;padding:10px;cursor:pointer;font-family:var(--font);
+        ">Fechar</button>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  // Preenche o preview
+  document.getElementById('relatorio-preview').textContent = texto;
+
+  // Monta o link do WhatsApp com o próprio número do técnico
+  const numero = tecnico?.whatsapp || '';
+  const link   = `https://wa.me/55${numero}?text=${encodeURIComponent(texto)}`;
+  const btnEnviar = document.getElementById('btn-enviar-relatorio');
+  btnEnviar.href = link;
+  btnEnviar.onclick = () => {
+    localStorage.setItem('mc_ultimo_relatorio', hoje);
+    fecharModalRelatorio(false);
+  };
+
+  modal.style.display = 'flex';
+
+  // Vibra para chamar atenção
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+}
+
+function fecharModalRelatorio(salvarEnviado) {
+  const modal = document.getElementById('modal-relatorio');
+  if (modal) modal.style.display = 'none';
+  if (salvarEnviado) {
+    const hoje = new Date().toLocaleDateString('pt-BR');
+    localStorage.setItem('mc_ultimo_relatorio', hoje);
+  }
+}
+
+// Botão manual no histórico para enviar a qualquer hora
+function enviarRelatorioManual() {
+  const texto = gerarTextoRelatorio();
+  if (!texto) {
+    toast('Nenhum registro hoje para enviar.', 'warn');
+    return;
+  }
+  const hoje   = new Date().toLocaleDateString('pt-BR');
+  mostrarModalRelatorio(texto, hoje);
 }
 </script>
 </body>
