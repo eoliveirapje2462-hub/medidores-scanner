@@ -457,37 +457,62 @@
 
   <!-- Panel: Estoque -->
   <div class="panel" id="panel-estoque">
-    <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.5;">
-      Selecione o tipo, depois toque em Entrada ou Saída para registrar no seu estoque pessoal.
+
+    <!-- Resumo estoque atual -->
+    <div id="estoque-view-resumo">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.5;">
+        Toque em um tipo para registrar entrada ou saída no seu estoque.
+      </div>
+      <div id="estoque-cards" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
 
-    <!-- Seleção de tipo -->
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
-      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Selecionar tipo de medidor</div>
-      <div id="estoque-tipos" style="display:flex;flex-direction:column;gap:8px;"></div>
-    </div>
+    <!-- Seleção de movimento (aparece após tocar num card) -->
+    <div id="estoque-view-movimento" style="display:none;">
+      <button onclick="voltarEstoque()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--accent);font-family:var(--font);font-size:13px;cursor:pointer;margin-bottom:16px;padding:0;">
+        ← Voltar
+      </button>
 
-    <!-- Botões de bipagem -->
-    <div id="estoque-bip-area" style="display:none;background:var(--surface);border:1.5px solid var(--accent);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div>
-          <div style="font-size:14px;font-weight:700;color:var(--accent);" id="estoque-tipo-ativo">—</div>
-          <div style="font-size:11px;color:var(--text-muted);">Tipo selecionado</div>
+      <div id="estoque-mov-card" style="background:var(--surface);border:1.5px solid var(--accent);border-radius:var(--radius);padding:20px;margin-bottom:20px;text-align:center;">
+        <div style="font-size:32px;margin-bottom:8px;" id="estoque-mov-icon">🔵</div>
+        <div style="font-size:20px;font-weight:800;" id="estoque-mov-nome">Monofásico</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:4px;" id="estoque-mov-desc">Final 21 — 1 Fase</div>
+        <div style="margin-top:16px;display:flex;align-items:center;justify-content:center;gap:12px;">
+          <div style="font-size:13px;color:var(--text-muted);">Estoque atual:</div>
+          <div style="font-size:28px;font-weight:800;" id="estoque-mov-qtd">0</div>
+          <div style="font-size:13px;color:var(--text-muted);">/ <span id="estoque-mov-limite">10</span></div>
         </div>
-        <button onclick="cancelarBipEstoque()" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:12px;padding:6px 12px;cursor:pointer;font-family:var(--font);">✕ Cancelar</button>
       </div>
-      <div style="display:flex;gap:10px;">
-        <button onclick="bipEstoque('Entrada')" style="flex:1;background:var(--green-glow);border:1.5px solid var(--green);color:var(--green);border-radius:var(--radius-sm);font-size:15px;font-weight:700;padding:14px;cursor:pointer;font-family:var(--font);">📥 +1 Entrada</button>
-        <button onclick="bipEstoque('Saída')" style="flex:1;background:var(--red-glow);border:1.5px solid var(--red);color:var(--red);border-radius:var(--radius-sm);font-size:15px;font-weight:700;padding:14px;cursor:pointer;font-family:var(--font);">📤 -1 Saída</button>
+
+      <div style="display:flex;gap:12px;">
+        <button onclick="irParaScanner('Entrada')" style="
+          flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;
+          background:var(--green-glow);border:1.5px solid var(--green);color:var(--green);
+          border-radius:var(--radius);font-size:16px;font-weight:700;
+          padding:20px 12px;cursor:pointer;font-family:var(--font);">
+          <span style="font-size:32px;">📥</span>
+          Entrada
+          <span style="font-size:11px;font-weight:400;color:var(--green);opacity:0.8;">Ir para o scanner</span>
+        </button>
+        <button onclick="irParaScanner('Saída')" style="
+          flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;
+          background:var(--red-glow);border:1.5px solid var(--red);color:var(--red);
+          border-radius:var(--radius);font-size:16px;font-weight:700;
+          padding:20px 12px;cursor:pointer;font-family:var(--font);">
+          <span style="font-size:32px;">📤</span>
+          Saída
+          <span style="font-size:11px;font-weight:400;color:var(--red);opacity:0.8;">Ir para o scanner</span>
+        </button>
       </div>
-      <div style="margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;color:var(--text-dim);text-align:center;" id="estoque-bip-status">
-        Pressione Entrada ou Saída para registrar
-      </div>
+
+      <button onclick="editarLimite(tipoEstoqueSelecionado)" style="
+        width:100%;margin-top:12px;background:var(--surface);
+        border:1px solid var(--border);border-radius:var(--radius-sm);
+        color:var(--text-muted);font-size:13px;padding:12px;
+        cursor:pointer;font-family:var(--font);">
+        ✏️ Editar limite máximo
+      </button>
     </div>
 
-    <!-- Cards por tipo -->
-    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Estoque atual</div>
-    <div id="estoque-cards" style="display:flex;flex-direction:column;gap:10px;"></div>
   </div>
 
 </div>
@@ -1659,63 +1684,110 @@ function salvarLimites(lim) {
 function renderEstoque() {
   const estoque = getEstoque();
   const limites = getLimites();
-
-  // Botões de seleção de tipo
-  const tiposEl = document.getElementById('estoque-tipos');
-  tiposEl.innerHTML = TIPOS_MEDIDOR.map(t => `
-    <button class="estoque-tipo-btn${tipoEstoqueSelecionado === t.id ? ' selected' : ''}"
-            onclick="selecionarTipoEstoque('${t.id}')">
-      <span class="estoque-tipo-icon">${t.icon}</span>
-      <div>
-        <div class="estoque-tipo-nome">${t.nome}</div>
-        <div class="estoque-tipo-desc">${t.desc}</div>
-      </div>
-    </button>
-  `).join('');
-
-  // Cards de estoque
   const cardsEl = document.getElementById('estoque-cards');
+  if (!cardsEl) return;
+
   cardsEl.innerHTML = TIPOS_MEDIDOR.map(t => {
     const qtd    = estoque[t.id] || 0;
     const limite = limites[t.id] || LIMITE_PADRAO;
     const pct    = Math.min(100, Math.round((qtd / limite) * 100));
     const estado = qtd >= limite ? 'cheio' : qtd <= ALERTA_MINIMO ? 'alerta' : 'ok';
-
+    const msg    = estado === 'cheio'  ? '🔴 Limite atingido'
+                 : estado === 'alerta' ? `⚠️ Apenas ${qtd} — repor`
+                 : `✓ ${qtd} de ${limite}`;
     return `
-    <div class="estoque-card ${estado}">
+    <div class="estoque-card ${estado}" onclick="abrirMovimento('${t.id}')" style="cursor:pointer;">
       <div class="estoque-card-header">
-        <div class="estoque-card-nome">${t.icon} ${t.nome}</div>
+        <div class="estoque-card-nome">${t.icon} ${t.nome}
+          <span style="font-size:11px;color:var(--text-muted);font-weight:400;">${t.desc}</span>
+        </div>
         <div class="estoque-card-qtd ${estado}">${qtd}</div>
       </div>
       <div class="estoque-prog-bar">
         <div class="estoque-prog-fill ${estado}" style="width:${pct}%"></div>
       </div>
       <div class="estoque-card-info">
-        <div class="estoque-card-meta">
-          ${estado === 'cheio'  ? '🔴 Limite atingido!' :
-            estado === 'alerta' ? `⚠️ Repor em breve — mínimo ${ALERTA_MINIMO}` :
-            `✓ ${qtd} de ${limite} unidades`}
-        </div>
-        <button class="estoque-limite-btn" onclick="editarLimite('${t.id}')">
-          ✏️ Limite: ${limite}
-        </button>
+        <div class="estoque-card-meta">${msg}</div>
+        <div style="font-size:11px;color:var(--text-muted);">Toque para registrar →</div>
       </div>
     </div>`;
   }).join('');
 }
 
-function selecionarTipoEstoque(id) {
+function abrirMovimento(id) {
   tipoEstoqueSelecionado = id;
-  const tipo = TIPOS_MEDIDOR.find(t => t.id === id);
-  document.getElementById('estoque-tipo-ativo').textContent = `${tipo.icon} ${tipo.nome}`;
-  document.getElementById('estoque-bip-area').style.display = 'block';
-  document.getElementById('estoque-bip-status').textContent = 'Pressione Entrada ou Saída para registrar';
+  const tipo    = TIPOS_MEDIDOR.find(t => t.id === id);
+  const estoque = getEstoque();
+  const limites = getLimites();
+  const qtd     = estoque[id] || 0;
+  const limite  = limites[id] || LIMITE_PADRAO;
+
+  // Preenche a tela de movimento
+  document.getElementById('estoque-mov-icon').textContent  = tipo.icon;
+  document.getElementById('estoque-mov-nome').textContent  = tipo.nome;
+  document.getElementById('estoque-mov-desc').textContent  = tipo.desc;
+  document.getElementById('estoque-mov-qtd').textContent   = qtd;
+  document.getElementById('estoque-mov-limite').textContent = limite;
+
+  // Cor da quantidade
+  const estado = qtd >= limite ? 'cheio' : qtd <= ALERTA_MINIMO ? 'alerta' : 'ok';
+  const cores  = { ok: 'var(--green)', alerta: 'var(--yellow)', cheio: 'var(--red)' };
+  document.getElementById('estoque-mov-qtd').style.color = cores[estado];
+
+  // Troca de view
+  document.getElementById('estoque-view-resumo').style.display   = 'none';
+  document.getElementById('estoque-view-movimento').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+function voltarEstoque() {
+  tipoEstoqueSelecionado = null;
+  document.getElementById('estoque-view-resumo').style.display   = 'block';
+  document.getElementById('estoque-view-movimento').style.display = 'none';
   renderEstoque();
+}
+
+function irParaScanner(movimento) {
+  if (!tipoEstoqueSelecionado) return;
+  const estoque = getEstoque();
+  const limites = getLimites();
+  const qtd     = estoque[tipoEstoqueSelecionado] || 0;
+  const limite  = limites[tipoEstoqueSelecionado] || LIMITE_PADRAO;
+  const tipo    = TIPOS_MEDIDOR.find(t => t.id === tipoEstoqueSelecionado);
+
+  if (movimento === 'Entrada' && qtd >= limite) {
+    tocarBip('erro');
+    if (navigator.vibrate) navigator.vibrate([100,50,100]);
+    toast(`🔴 Limite de ${limite} atingido para ${tipo.nome}!`, 'error');
+    return;
+  }
+  if (movimento === 'Saída' && qtd <= 0) {
+    tocarBip('erro');
+    if (navigator.vibrate) navigator.vibrate([100,50,100]);
+    toast(`🔴 Estoque zerado! Não há ${tipo.nome} para dar saída.`, 'error');
+    return;
+  }
+
+  // Salva contexto para atualizar estoque após bipagem
+  window._estoqueContexto = {
+    tipoId:    tipoEstoqueSelecionado,
+    tipoNome:  tipo.nome,
+    movimento: movimento
+  };
+
+  // Vai para scanner com tipo pré-selecionado
+  voltarEstoque();
+  showTab('registrar');
+  selectTipo(movimento);
+  atualizarBannerEstoque();
+  setStatus(`📦 ${tipo.nome} — ${movimento} · Bipe o medidor`);
+  toast(`📦 ${tipo.nome} — ${movimento}: bipe o medidor`, 'success');
 }
 
 function cancelarContextoEstoque() {
   window._estoqueContexto = null;
-  document.getElementById('estoque-contexto-banner').style.display = 'none';
+  const banner = document.getElementById('estoque-contexto-banner');
+  if (banner) banner.style.display = 'none';
   currentTipo = null;
   document.getElementById('tipo-entrada').classList.remove('selected');
   document.getElementById('tipo-saida').classList.remove('selected');
@@ -1725,6 +1797,7 @@ function cancelarContextoEstoque() {
 
 function atualizarBannerEstoque() {
   const banner = document.getElementById('estoque-contexto-banner');
+  if (!banner) return;
   if (window._estoqueContexto) {
     const ctx = window._estoqueContexto;
     document.getElementById('estoque-ctx-texto').textContent =
@@ -1735,47 +1808,8 @@ function atualizarBannerEstoque() {
   }
 }
 
-function bipEstoque(movimento) {
-  if (!tipoEstoqueSelecionado) return;
-
-  const estoque = getEstoque();
-  const limites = getLimites();
-  const qtd     = estoque[tipoEstoqueSelecionado] || 0;
-  const limite  = limites[tipoEstoqueSelecionado] || LIMITE_PADRAO;
-  const tipo    = TIPOS_MEDIDOR.find(t => t.id === tipoEstoqueSelecionado);
-
-  // Verifica limites antes de ir para o scanner
-  if (movimento === 'Entrada' && qtd >= limite) {
-    tocarBip('erro');
-    if (navigator.vibrate) navigator.vibrate([100,50,100]);
-    document.getElementById('estoque-bip-status').textContent = `🔴 Limite de ${limite} unidades atingido!`;
-    document.getElementById('estoque-bip-status').style.color = 'var(--red)';
-    return;
-  }
-  if (movimento === 'Saída' && qtd <= 0) {
-    tocarBip('erro');
-    if (navigator.vibrate) navigator.vibrate([100,50,100]);
-    document.getElementById('estoque-bip-status').textContent = '🔴 Estoque zerado! Não é possível dar saída.';
-    document.getElementById('estoque-bip-status').style.color = 'var(--red)';
-    return;
-  }
-
-  // Salva contexto do estoque para usar após leitura do scanner
-  window._estoqueContexto = {
-    tipoId:    tipoEstoqueSelecionado,
-    tipoNome:  tipo.nome,
-    movimento: movimento
-  };
-
-  // Vai para aba Registrar com o tipo já selecionado
-  showTab('registrar');
-  selectTipo(movimento);
-  atualizarBannerEstoque();
-  setStatus(`📦 Estoque ${tipo.nome} — Bipe o medidor para registrar ${movimento}`);
-  toast(`📦 Bipe o medidor para ${movimento} do estoque ${tipo.nome}`, 'success');
-}
-
 function editarLimite(id) {
+  if (!id) id = tipoEstoqueSelecionado;
   const limites = getLimites();
   const atual   = limites[id] || LIMITE_PADRAO;
   const tipo    = TIPOS_MEDIDOR.find(t => t.id === id);
@@ -1785,18 +1819,20 @@ function editarLimite(id) {
   if (isNaN(val) || val < 1) { toast('Valor inválido.', 'error'); return; }
   limites[id] = val;
   salvarLimites(limites);
-  renderEstoque();
+  // Atualiza a tela de movimento se estiver aberta
+  if (document.getElementById('estoque-view-movimento').style.display !== 'none') {
+    abrirMovimento(id);
+  } else {
+    renderEstoque();
+  }
   toast(`✓ Limite de ${tipo.nome} atualizado para ${val}.`, 'success');
 }
 
-// Verifica alertas de estoque ao abrir o app
 function verificarAlertasEstoque() {
   const estoque = getEstoque();
-  const limites = getLimites();
   const alertas = TIPOS_MEDIDOR.filter(t => {
-    const qtd    = estoque[t.id] || 0;
-    const limite = limites[t.id] || LIMITE_PADRAO;
-    return qtd <= ALERTA_MINIMO && qtd > 0;
+    const qtd = estoque[t.id] || 0;
+    return qtd > 0 && qtd <= ALERTA_MINIMO;
   });
   if (alertas.length > 0) {
     setTimeout(() => {
