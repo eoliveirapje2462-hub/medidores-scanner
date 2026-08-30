@@ -411,6 +411,12 @@
       </button>
     </div>
 
+    <!-- Seletor de tipo de medidor (aparece após selecionar Entrada ou Saída) -->
+    <div id="seletor-tipo-medidor" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Tipo de medidor</div>
+      <div style="display:flex;flex-direction:column;gap:8px;" id="seletor-tipos-lista"></div>
+    </div>
+
     <div class="obs-wrap">
       <label class="obs-label">Observação (opcional)</label>
       <textarea id="campo-obs" placeholder="Ex: medidor danificado, local de instalação..."></textarea>
@@ -457,63 +463,13 @@
 
   <!-- Panel: Estoque -->
   <div class="panel" id="panel-estoque">
-
-    <!-- Resumo estoque atual -->
-    <div id="estoque-view-resumo">
-      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.5;">
-        Toque em um tipo para registrar entrada ou saída no seu estoque.
-      </div>
-      <div id="estoque-cards" style="display:flex;flex-direction:column;gap:10px;"></div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.5;">
+      Quantidade mínima que você deve ter de cada tipo. Toque em ✏️ para ajustar.
     </div>
-
-    <!-- Seleção de movimento (aparece após tocar num card) -->
-    <div id="estoque-view-movimento" style="display:none;">
-      <button onclick="voltarEstoque()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--accent);font-family:var(--font);font-size:13px;cursor:pointer;margin-bottom:16px;padding:0;">
-        ← Voltar
-      </button>
-
-      <div id="estoque-mov-card" style="background:var(--surface);border:1.5px solid var(--accent);border-radius:var(--radius);padding:20px;margin-bottom:20px;text-align:center;">
-        <div style="font-size:32px;margin-bottom:8px;" id="estoque-mov-icon">🔵</div>
-        <div style="font-size:20px;font-weight:800;" id="estoque-mov-nome">Monofásico</div>
-        <div style="font-size:13px;color:var(--text-muted);margin-top:4px;" id="estoque-mov-desc">Final 21 — 1 Fase</div>
-        <div style="margin-top:16px;display:flex;align-items:center;justify-content:center;gap:12px;">
-          <div style="font-size:13px;color:var(--text-muted);">Estoque atual:</div>
-          <div style="font-size:28px;font-weight:800;" id="estoque-mov-qtd">0</div>
-          <div style="font-size:13px;color:var(--text-muted);">/ <span id="estoque-mov-limite">10</span></div>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:12px;">
-        <button onclick="irParaScanner('Entrada')" style="
-          flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;
-          background:var(--green-glow);border:1.5px solid var(--green);color:var(--green);
-          border-radius:var(--radius);font-size:16px;font-weight:700;
-          padding:20px 12px;cursor:pointer;font-family:var(--font);">
-          <span style="font-size:32px;">📥</span>
-          Entrada
-          <span style="font-size:11px;font-weight:400;color:var(--green);opacity:0.8;">Ir para o scanner</span>
-        </button>
-        <button onclick="irParaScanner('Saída')" style="
-          flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;
-          background:var(--red-glow);border:1.5px solid var(--red);color:var(--red);
-          border-radius:var(--radius);font-size:16px;font-weight:700;
-          padding:20px 12px;cursor:pointer;font-family:var(--font);">
-          <span style="font-size:32px;">📤</span>
-          Saída
-          <span style="font-size:11px;font-weight:400;color:var(--red);opacity:0.8;">Ir para o scanner</span>
-        </button>
-      </div>
-
-      <button onclick="editarLimite(tipoEstoqueSelecionado)" style="
-        width:100%;margin-top:12px;background:var(--surface);
-        border:1px solid var(--border);border-radius:var(--radius-sm);
-        color:var(--text-muted);font-size:13px;padding:12px;
-        cursor:pointer;font-family:var(--font);">
-        ✏️ Editar limite máximo
-      </button>
-    </div>
-
+    <div id="estoque-cards" style="display:flex;flex-direction:column;gap:10px;"></div>
   </div>
+
+</div>
 
 </div>
 
@@ -543,6 +499,7 @@ const MODO_TESTE = false;
 //  STATE
 // ══════════════════════════════════════════
 let currentTipo  = null;
+let currentTipoMedidor = null; // tipo de medidor selecionado (Monofásico, etc.)
 let modoLote     = false;
 let codigosLote  = [];
 let cameraActive = false;
@@ -1274,6 +1231,28 @@ function selectTipo(tipo) {
   currentTipo = tipo;
   document.getElementById('tipo-entrada').classList.toggle('selected', tipo === 'Entrada');
   document.getElementById('tipo-saida').classList.toggle('selected', tipo === 'Saída');
+
+  // Mostra seletor de tipo de medidor
+  const seletor = document.getElementById('seletor-tipo-medidor');
+  const lista   = document.getElementById('seletor-tipos-lista');
+  seletor.style.display = 'block';
+  lista.innerHTML = TIPOS_MEDIDOR.map(t => `
+    <button onclick="selecionarTipoMedidor('${t.id}')"
+      style="display:flex;align-items:center;gap:12px;
+        background:${currentTipoMedidor === t.id ? 'rgba(59,130,246,0.1)' : 'var(--bg)'};
+        border:1.5px solid ${currentTipoMedidor === t.id ? 'var(--accent)' : 'var(--border)'};
+        border-radius:var(--radius-sm);padding:11px 14px;
+        cursor:pointer;font-family:var(--font);width:100%;text-align:left;
+        transition:all 0.2s;">
+      <span style="font-size:20px;">${t.icon}</span>
+      <div>
+        <div style="font-size:14px;font-weight:600;color:var(--text);">${t.nome}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${t.desc}</div>
+      </div>
+      ${currentTipoMedidor === t.id ? '<span style="margin-left:auto;color:var(--accent);font-size:16px;">✓</span>' : ''}
+    </button>
+  `).join('');
+
   updateBtnRegistrar();
 }
 
@@ -1283,9 +1262,16 @@ function onMedidorInput(val) {
   updateBtnRegistrar();
 }
 
+function selecionarTipoMedidor(id) {
+  currentTipoMedidor = id;
+  // Re-renderiza o seletor para mostrar selecionado
+  selectTipo(currentTipo);
+  updateBtnRegistrar();
+}
+
 function updateBtnRegistrar() {
   const val = document.getElementById('campo-medidor').value.trim();
-  document.getElementById('btn-registrar').disabled = !(val && currentTipo);
+  document.getElementById('btn-registrar').disabled = !(val && currentTipo && currentTipoMedidor);
 }
 
 // ══════════════════════════════════════════
@@ -1344,20 +1330,38 @@ function registrar() {
       const estoque = getEstoque();
       const limites = getLimites();
       const qtd     = estoque[ctx.tipoId] || 0;
-      const limite  = limites[ctx.tipoId] || LIMITE_PADRAO;
-
       if (ctx.movimento === 'Entrada') {
         estoque[ctx.tipoId] = qtd + 1;
       } else {
         estoque[ctx.tipoId] = Math.max(0, qtd - 1);
       }
       salvarEstoque(estoque);
-
       const novaQtd = estoque[ctx.tipoId];
       if (novaQtd <= ALERTA_MINIMO) {
         setTimeout(() => toast(`⚠️ ${ctx.tipoNome}: apenas ${novaQtd} unidade(s)! Repor em breve.`, 'warn'), 1500);
       }
       window._estoqueContexto = null;
+    }
+
+    // Atualiza estoque pelo tipo de medidor selecionado
+    if (currentTipoMedidor) {
+      const estoque = getEstoque();
+      const limites = getLimites();
+      const qtd     = estoque[currentTipoMedidor] || 0;
+      const limite  = limites[currentTipoMedidor] || LIMITE_PADRAO;
+      const tipo    = TIPOS_MEDIDOR.find(t => t.id === currentTipoMedidor);
+
+      if (novoRegistro.tipo === 'Entrada') {
+        estoque[currentTipoMedidor] = Math.min(limite, qtd + 1);
+      } else {
+        estoque[currentTipoMedidor] = Math.max(0, qtd - 1);
+      }
+      salvarEstoque(estoque);
+
+      const novaQtd = estoque[currentTipoMedidor];
+      if (novaQtd <= ALERTA_MINIMO) {
+        setTimeout(() => toast(`⚠️ Estoque baixo: ${tipo.nome} com apenas ${novaQtd} unidade(s)!`, 'warn'), 1500);
+      }
     }
 
     // Adiciona na fila de sync e tenta enviar
@@ -1372,8 +1376,10 @@ function registrar() {
     document.getElementById('campo-obs').value = '';
     document.getElementById('campo-hint').textContent = 'Aponte a câmera para o código de barras do medidor.';
     currentTipo = null; lastReadCode = '';
+    currentTipoMedidor = null;
     document.getElementById('tipo-entrada').classList.remove('selected');
     document.getElementById('tipo-saida').classList.remove('selected');
+    document.getElementById('seletor-tipo-medidor').style.display = 'none';
     btnReg.innerHTML = '✓ Registrar'; btnReg.disabled = true;
     setStatus('📷 Pronto para próxima bipagem.');
   };
@@ -1689,26 +1695,29 @@ function renderEstoque() {
 
   cardsEl.innerHTML = TIPOS_MEDIDOR.map(t => {
     const qtd    = estoque[t.id] || 0;
-    const limite = limites[t.id] || LIMITE_PADRAO;
-    const pct    = Math.min(100, Math.round((qtd / limite) * 100));
-    const estado = qtd >= limite ? 'cheio' : qtd <= ALERTA_MINIMO ? 'alerta' : 'ok';
-    const msg    = estado === 'cheio'  ? '🔴 Limite atingido'
-                 : estado === 'alerta' ? `⚠️ Apenas ${qtd} — repor`
-                 : `✓ ${qtd} de ${limite}`;
+    const minimo = limites[t.id] || ALERTA_MINIMO;
+    const maximo = (limites[`max_${t.id}`]) || LIMITE_PADRAO;
+    const pct    = Math.min(100, Math.round((qtd / maximo) * 100));
+    const estado = qtd >= maximo ? 'cheio' : qtd <= minimo ? 'alerta' : 'ok';
+    const msg    = estado === 'cheio'  ? '🔴 Limite máximo atingido'
+                 : estado === 'alerta' ? `⚠️ Abaixo do mínimo (${minimo})`
+                 : `✓ ${qtd} unidades`;
+
     return `
-    <div class="estoque-card ${estado}" onclick="abrirMovimento('${t.id}')" style="cursor:pointer;">
+    <div class="estoque-card ${estado}">
       <div class="estoque-card-header">
-        <div class="estoque-card-nome">${t.icon} ${t.nome}
-          <span style="font-size:11px;color:var(--text-muted);font-weight:400;">${t.desc}</span>
-        </div>
+        <div class="estoque-card-nome">${t.icon} ${t.nome}</div>
         <div class="estoque-card-qtd ${estado}">${qtd}</div>
       </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">${t.desc}</div>
       <div class="estoque-prog-bar">
         <div class="estoque-prog-fill ${estado}" style="width:${pct}%"></div>
       </div>
       <div class="estoque-card-info">
         <div class="estoque-card-meta">${msg}</div>
-        <div style="font-size:11px;color:var(--text-muted);">Toque para registrar →</div>
+        <button class="estoque-limite-btn" onclick="editarLimite('${t.id}')">
+          ✏️ Mín: ${minimo} · Máx: ${maximo}
+        </button>
       </div>
     </div>`;
   }).join('');
@@ -1809,30 +1818,35 @@ function atualizarBannerEstoque() {
 }
 
 function editarLimite(id) {
-  if (!id) id = tipoEstoqueSelecionado;
   const limites = getLimites();
-  const atual   = limites[id] || LIMITE_PADRAO;
   const tipo    = TIPOS_MEDIDOR.find(t => t.id === id);
-  const novo    = prompt(`Limite máximo para ${tipo.nome}:`, atual);
-  if (novo === null) return;
-  const val = parseInt(novo, 10);
-  if (isNaN(val) || val < 1) { toast('Valor inválido.', 'error'); return; }
-  limites[id] = val;
+  const minAtual = limites[id] || ALERTA_MINIMO;
+  const maxAtual = limites[`max_${id}`] || LIMITE_PADRAO;
+
+  const novoMin = prompt(`${tipo.icon} ${tipo.nome}\n\nQuantidade MÍNIMA (alerta quando abaixo):`, minAtual);
+  if (novoMin === null) return;
+  const valMin = parseInt(novoMin, 10);
+  if (isNaN(valMin) || valMin < 0) { toast('Valor inválido.', 'error'); return; }
+
+  const novoMax = prompt(`${tipo.icon} ${tipo.nome}\n\nQuantidade MÁXIMA (limite no estoque):`, maxAtual);
+  if (novoMax === null) return;
+  const valMax = parseInt(novoMax, 10);
+  if (isNaN(valMax) || valMax < valMin) { toast(`Máximo deve ser maior que o mínimo (${valMin}).`, 'error'); return; }
+
+  limites[id]          = valMin;
+  limites[`max_${id}`] = valMax;
   salvarLimites(limites);
-  // Atualiza a tela de movimento se estiver aberta
-  if (document.getElementById('estoque-view-movimento').style.display !== 'none') {
-    abrirMovimento(id);
-  } else {
-    renderEstoque();
-  }
-  toast(`✓ Limite de ${tipo.nome} atualizado para ${val}.`, 'success');
+  renderEstoque();
+  toast(`✓ ${tipo.nome}: mín ${valMin} · máx ${valMax}`, 'success');
 }
 
 function verificarAlertasEstoque() {
   const estoque = getEstoque();
+  const limites = getLimites();
   const alertas = TIPOS_MEDIDOR.filter(t => {
-    const qtd = estoque[t.id] || 0;
-    return qtd > 0 && qtd <= ALERTA_MINIMO;
+    const qtd    = estoque[t.id] || 0;
+    const minimo = limites[t.id] || ALERTA_MINIMO;
+    return qtd > 0 && qtd <= minimo;
   });
   if (alertas.length > 0) {
     setTimeout(() => {
