@@ -43,7 +43,7 @@
   @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
   /* CADASTRO */
-  #screen-cadastro { display: none; min-height: 100vh; align-items: center; justify-content: center; padding: 24px; flex-direction: column; }
+  #screen-cadastro { display: none; min-height: 100vh; align-items: center; justify-content: flex-start; padding: 60px 24px 24px; flex-direction: column; overflow-y: auto; }
   #screen-cadastro.active { display: flex; }
   .cadastro-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 32px 24px; width: 100%; max-width: 400px; }
   .cadastro-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
@@ -62,7 +62,7 @@
   .btn-primary:disabled { opacity: 0.5; pointer-events: none; }
 
   /* LICENÇA */
-  #screen-licenca { display: none; min-height: 100vh; align-items: center; justify-content: center; padding: 24px; flex-direction: column; }
+  #screen-licenca { display: none; min-height: 100vh; align-items: center; justify-content: flex-start; padding: 60px 24px 24px; flex-direction: column; overflow-y: auto; }
   #screen-licenca.active { display: flex; }
   .licenca-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: 20px; padding: 32px 24px; width: 100%; max-width: 400px; text-align: center; }
   .licenca-icon { font-size: 48px; margin-bottom: 16px; }
@@ -558,8 +558,20 @@ document.getElementById('btn-cadastrar').addEventListener('click', async () => {
   if (whats.length < 10) { toast('WhatsApp inválido.', 'error'); return; }
   const btn = document.getElementById('btn-cadastrar');
   btn.disabled = true; btn.textContent = 'Entrando...';
+
+  // Esconde o teclado antes de navegar
+  document.activeElement?.blur();
+
   tecnico = saveTecnico(nome, whats);
   await verificarLicenca(true);
+
+  // Força scroll para o topo após navegação
+  setTimeout(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, 100);
+
   btn.disabled = false; btn.textContent = 'Começar a usar';
 });
 
