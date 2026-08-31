@@ -556,23 +556,28 @@ document.getElementById('btn-cadastrar').addEventListener('click', async () => {
   const whats = document.getElementById('cad-whats').value.replace(/\D/g, '');
   if (nome.length < 5)  { toast('Informe seu nome completo.', 'error'); return; }
   if (whats.length < 10) { toast('WhatsApp inválido.', 'error'); return; }
-  const btn = document.getElementById('btn-cadastrar');
-  btn.disabled = true; btn.textContent = 'Entrando...';
 
-  // Esconde o teclado antes de navegar
+  const btn = document.getElementById('btn-cadastrar');
+  btn.disabled = true;
+  btn.textContent = 'Entrando...';
+
+  // Fecha o teclado virtual
+  document.getElementById('cad-nome').blur();
+  document.getElementById('cad-whats').blur();
   document.activeElement?.blur();
+
+  // Aguarda o teclado fechar antes de navegar
+  await new Promise(r => setTimeout(r, 400));
 
   tecnico = saveTecnico(nome, whats);
   await verificarLicenca(true);
 
-  // Força scroll para o topo após navegação
-  setTimeout(() => {
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, 100);
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
 
-  btn.disabled = false; btn.textContent = 'Começar a usar';
+  btn.disabled = false;
+  btn.textContent = 'Começar a usar';
 });
 
 // ══════════════════════════════════════════
@@ -1668,6 +1673,21 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
 }
+
+// ── Corrige scroll após teclado fechar no mobile ──
+let alturaAnterior = window.innerHeight;
+window.addEventListener('resize', () => {
+  const alturaAtual = window.innerHeight;
+  // Teclado fechou (altura aumentou)
+  if (alturaAtual > alturaAnterior) {
+    setTimeout(() => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }, 100);
+  }
+  alturaAnterior = alturaAtual;
+});
 
 // ══════════════════════════════════════════
 //  ESTOQUE — controle por tipo de medidor
