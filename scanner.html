@@ -533,8 +533,9 @@ window.addEventListener('online', () => {
 
 function hideSplash() {
   const s = document.getElementById('splash');
+  if (!s) return;
   s.classList.add('hidden');
-  setTimeout(() => s.remove(), 400);
+  setTimeout(() => { if (s.parentNode) s.remove(); }, 400);
 }
 
 // ══════════════════════════════════════════
@@ -561,20 +562,23 @@ document.getElementById('btn-cadastrar').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = 'Entrando...';
 
-  // Fecha o teclado virtual
+  // Fecha o teclado
   document.getElementById('cad-nome').blur();
   document.getElementById('cad-whats').blur();
-  document.activeElement?.blur();
-
-  // Aguarda o teclado fechar antes de navegar
-  await new Promise(r => setTimeout(r, 400));
 
   tecnico = saveTecnico(nome, whats);
-  await verificarLicenca(true);
 
-  window.scrollTo(0, 0);
-  document.documentElement.scrollTop = 0;
-  document.body.scrollTop = 0;
+  // Entra direto no app com trial local
+  // A verificação real acontece em background
+  hideSplash();
+  mostrarApp('ativa', 7);
+
+  // Verifica licença real em background sem bloquear
+  if (navigator.onLine) {
+    atualizarLicencaBackground().then(() => {
+      // Se bloqueado no servidor, aplica na próxima abertura
+    });
+  }
 
   btn.disabled = false;
   btn.textContent = 'Começar a usar';
@@ -692,6 +696,7 @@ function normalizarLicenca(raw) {
   const statusRaw = String(data.situacao || data.status || '').trim().toUpperCase();
   const tipo = String(data.tipo || '').trim().toLowerCase();
   const vencimento = data.vencimento || data.dataVencimento || data.data_vencimento || '';
+  const aviso = data.aviso === true;
   let dias = Number.isFinite(Number(data.diasRestantes)) ? Number(data.diasRestantes) : null;
   if (dias === null && vencimento) {
     const partes = String(vencimento).split(/[\/-]/).map(Number);
@@ -706,7 +711,9 @@ function normalizarLicenca(raw) {
   if (['ERRO','BLOQUEADO','BLOQUEADA','INATIVO','INATIVA'].includes(statusRaw)) situacao = 'BLOQUEADA';
   else if (['EXPIRADO','EXPIRADA'].includes(statusRaw) || (dias !== null && dias < 0)) situacao = 'EXPIRADA';
   else if (tipo === 'trial' || statusRaw === 'TRIAL') situacao = 'TRIAL';
-  else if (['ATIVO','ATIVA','OK'].includes(statusRaw)) situacao = (dias !== null && dias <= 15) ? 'AVISO' : 'ATIVA';
+  else if (['ATIVO','ATIVA','OK'].includes(statusRaw)) {
+    situacao = aviso ? 'ATIVA' : 'ATIVA'; // sempre ATIVA — sem avisos de vencimento
+  }
   else if (!situacao) situacao = tipo === 'trial' ? 'TRIAL' : 'ATIVA';
   return { ...data, situacao, diasRestantes: dias, vencimento };
 }
