@@ -1659,11 +1659,12 @@ if ('serviceWorker' in navigator) {
 //  ESTOQUE — controle por tipo de medidor
 // ══════════════════════════════════════════
 const TIPOS_MEDIDOR = [
-  { id: 'mono',   nome: 'Monofásico',          desc: 'Final 21 — 1 Fase',          icon: '🔵' },
-  { id: 'bi',     nome: 'Bifásico',             desc: 'Final 31 — 2 Fases',         icon: '🟡' },
-  { id: 'tri',    nome: 'Trifásico',            desc: 'Final 23 ou 33 — 3 Fases',   icon: '🔴' },
-  { id: 'solar',  nome: 'Bidirecional Solar',   desc: 'Sufixo L ou -B',             icon: '🟢' },
-  { id: 'ng',     nome: 'Nova Geração',         desc: 'Sufixo -NG',                 icon: '⚪' },
+  { id: 'mono',      nome: 'Monofásico',      desc: 'Final 21 — 1 Fase',          icon: '🔵' },
+  { id: 'bi',        nome: 'Bifásico',         desc: 'Final 31 — 2 Fases',         icon: '🟡' },
+  { id: 'tri',       nome: 'Trifásico',        desc: 'Final 23 ou 33 — 3 Fases',   icon: '🔴' },
+  { id: 'mmgd_tri',  nome: 'MMGD Trifásico',   desc: 'Medidor Bidirecional Solar — 3 Fases', icon: '🟢' },
+  { id: 'mmgd_bi',   nome: 'MMGD Bifásico',    desc: 'Medidor Bidirecional Solar — 2 Fases', icon: '🟣' },
+  { id: 'mmgd_mono', nome: 'MMGD Monofásico',  desc: 'Medidor Bidirecional Solar — 1 Fase',  icon: '🟠' },
 ];
 
 const LIMITE_PADRAO   = 10;
