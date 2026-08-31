@@ -592,51 +592,27 @@ async function verificarLicenca(isInit = false) {
   }
   // ★ FIM MODO TESTE
 
-  let status = null;
-
-  // Sem internet — usa cache direto sem tentar o servidor
-  if (!navigator.onLine) {
-    const cached = localStorage.getItem('mc_licenca_cache');
-    if (cached) {
-      try {
-        const c = JSON.parse(cached);
-        const ageDias = (Date.now() - (c.cachedAt || 0)) / 86400000;
-        if (ageDias < 7) {
-          status = c;
-        } else {
-          status = { situacao: 'BLOQUEADA', mensagem: 'Sem conexão há mais de 7 dias. Conecte-se para verificar sua licença.' };
-        }
-      } catch {}
-    }
-    hideSplash();
-    if (!status) { mostrarBloqueio('BLOQUEADA', 'Sem conexão. Conecte-se para verificar sua licença.'); return; }
-    const sit = (status.situacao || '').toUpperCase();
-    switch (sit) {
-      case 'ATIVA':     mostrarApp('ativa',  status.diasRestantes); break;
-      case 'TRIAL':     mostrarApp('trial',  status.diasRestantes); break;
-      case 'AVISO':     mostrarApp('aviso',  status.diasRestantes); break;
-      case 'EXPIRADA':
-      case 'BLOQUEADA': mostrarBloqueio(sit, status.mensagem); break;
-      default:          mostrarApp('trial',  status.diasRestantes); break;
-    }
-    return;
+  // Verifica cache primeiro — se válido usa direto sem esperar servidor
+  const cached = localStorage.getItem('mc_licenca_cache');
+  if (cached) {
+    try {
+      const c = JSON.parse(cached);
+      const ageDias = (Date.now() - (c.cachedAt || 0)) / 86400000;
+      if (ageDias < 1) {
+        // Cache de menos de 1 dia — usa direto e atualiza em background
+        hideSplash();
+        aplicarStatusLicenca(c);
+        // Atualiza em background sem bloquear
+        if (navigator.onLine) atualizarLicencaBackground();
+        return;
+      }
+    } catch {}
   }
 
-  // Com internet — verifica no servidor
-  try {
-    status = await jsonpRequest(
-      `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`,
-      12000
-    );
-    status = normalizarLicenca(status);
-    if (status.situacao === 'BLOQUEADA' || status.situacao === 'EXPIRADA') {
-      localStorage.removeItem('mc_licenca_cache');
-    } else {
-      localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...status, cachedAt: Date.now() }));
-    }
-  } catch (e) {
-    // Timeout ou erro de rede — tenta cache
-    const cached = localStorage.getItem('mc_licenca_cache');
+  let status = null;
+
+  // Sem internet — usa cache
+  if (!navigator.onLine) {
     if (cached) {
       try {
         const c = JSON.parse(cached);
@@ -644,11 +620,46 @@ async function verificarLicenca(isInit = false) {
         status = ageDias < 7 ? c : { situacao: 'BLOQUEADA', mensagem: 'Sem conexão há mais de 7 dias.' };
       } catch {}
     }
+    hideSplash();
+    if (!status) { mostrarBloqueio('BLOQUEADA', 'Sem conexão. Conecte-se para verificar sua licença.'); return; }
+    aplicarStatusLicenca(status);
+    return;
+  }
+
+  // Com internet — verifica no servidor com timeout de 10s
+  try {
+    status = await jsonpRequest(
+      `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`,
+      10000
+    );
+    status = normalizarLicenca(status);
+    if (status.situacao !== 'BLOQUEADA' && status.situacao !== 'EXPIRADA') {
+      localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...status, cachedAt: Date.now() }));
+    } else {
+      localStorage.removeItem('mc_licenca_cache');
+    }
+  } catch (e) {
+    // Timeout — usa cache ou libera com trial local
+    if (cached) {
+      try {
+        const c = JSON.parse(cached);
+        const ageDias = (Date.now() - (c.cachedAt || 0)) / 86400000;
+        status = ageDias < 7 ? c : null;
+      } catch {}
+    }
+    // Sem cache e sem internet no primeiro acesso — libera com trial local temporário
+    if (!status) {
+      status = { situacao: 'TRIAL', diasRestantes: 7 };
+      localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...status, cachedAt: Date.now() }));
+    }
   }
 
   hideSplash();
-  if (!status) { mostrarBloqueio('BLOQUEADA', 'Não foi possível verificar sua licença. Verifique sua conexão.'); return; }
+  if (!status) { mostrarBloqueio('BLOQUEADA', 'Não foi possível verificar sua licença.'); return; }
+  aplicarStatusLicenca(status);
+}
 
+function aplicarStatusLicenca(status) {
   const sit = (status.situacao || '').toUpperCase();
   switch (sit) {
     case 'ATIVA':     mostrarApp('ativa',  status.diasRestantes); break;
@@ -658,6 +669,22 @@ async function verificarLicenca(isInit = false) {
     case 'BLOQUEADA': mostrarBloqueio(sit, status.mensagem); break;
     default:          mostrarApp('trial',  status.diasRestantes); break;
   }
+}
+
+async function atualizarLicencaBackground() {
+  try {
+    const status = await jsonpRequest(
+      `${APPS_SCRIPT_URL}?action=licenca&whatsapp=${encodeURIComponent(tecnico.whatsapp)}&nome=${encodeURIComponent(tecnico.nome)}`,
+      10000
+    );
+    const normalizado = normalizarLicenca(status);
+    if (normalizado.situacao !== 'BLOQUEADA' && normalizado.situacao !== 'EXPIRADA') {
+      localStorage.setItem('mc_licenca_cache', JSON.stringify({ ...normalizado, cachedAt: Date.now() }));
+    } else {
+      // Se bloqueado no servidor, força verificação na próxima abertura
+      localStorage.removeItem('mc_licenca_cache');
+    }
+  } catch (_) {}
 }
 
 function normalizarLicenca(raw) {
