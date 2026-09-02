@@ -1726,6 +1726,9 @@ let tipoEstoqueSelecionado = null;
 
 // Estoque é sempre calculado do histórico — nunca contador manual
 function calcularEstoque() {
+  // Remove cache antigo que pode estar causando conflito
+  localStorage.removeItem('mc_estoque');
+
   const registros = getRegistros();
   const estoque   = {};
 
