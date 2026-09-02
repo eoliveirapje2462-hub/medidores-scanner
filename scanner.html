@@ -846,17 +846,24 @@ async function carregarRegistrosDaNuvem() {
         const chave = `${r.num}|${r.tipo}|${data}|${(hora||'').substring(0,5)}`;
 
         if (!chavesLocais.has(chave)) {
-          chavesLocais.add(chave); // evita duplicata dentro do próprio lote
+          chavesLocais.add(chave);
+          const tipoObj = r.tipoMedidorId
+            ? TIPOS_MEDIDOR.find(t => t.id === r.tipoMedidorId)
+            : null;
           locais.push({
-            id:           r.id,
-            num:          r.num,
-            tipo:         r.tipo,
-            obs:          r.obs,
-            gps:          r.gps,
-            data:         data,
-            hora:         hora,
-            tecnico:      r.tecnico,
-            sincronizado: true
+            id:              r.id,
+            num:             r.num,
+            tipo:            r.tipo,
+            tipoMedidorId:   r.tipoMedidorId   || null,
+            tipoMedidorNome: r.tipoMedidorNome || (tipoObj ? tipoObj.nome : null),
+            tipoMedidorIcon: tipoObj ? tipoObj.icon : null,
+            obs:             r.obs,
+            gps:             r.gps,
+            data:            data,
+            hora:            hora,
+            tecnico:         r.tecnico,
+            sincronizado:    true,
+            erro:            r.status === 'Erro'
           });
           novos++;
         }
@@ -897,14 +904,16 @@ function salvarFilaSync(fila) {
 function adicionarNaFila(registro) {
   const fila = getFilaSync();
   fila.push({
-    id:       registro.id,
-    dataHora: registro.data + ' ' + registro.hora,
-    tecnico:  registro.tecnico,
-    whatsapp: tecnico?.whatsapp || '',
-    medidor:  registro.num,
-    tipo:     registro.tipo,
-    gps:      registro.gps || 'Sem GPS',
-    obs:      registro.obs || ''
+    id:              registro.id,
+    dataHora:        registro.data + ' ' + registro.hora,
+    tecnico:         registro.tecnico,
+    whatsapp:        tecnico?.whatsapp || '',
+    medidor:         registro.num,
+    tipo:            registro.tipo,
+    gps:             registro.gps || 'Sem GPS',
+    obs:             registro.obs || '',
+    tipoMedidor:     registro.tipoMedidorNome || '',
+    tipoMedidorId:   registro.tipoMedidorId   || ''
   });
   salvarFilaSync(fila);
   atualizarBannerSync();
@@ -944,15 +953,17 @@ async function sincronizarAgora() {
       const item = fila[i];
       try {
         const params = new URLSearchParams({
-          action:   'registrar',
-          whatsapp: item.whatsapp  || '',
-          tecnico:  item.tecnico   || '',
-          medidor:  item.medidor   || '',
-          tipo:     item.tipo      || '',
-          obs:      item.obs       || '',
-          gps:      item.gps       || 'Sem GPS',
-          dataHora: item.dataHora  || '',
-          statusVal: ''
+          action:        'registrar',
+          whatsapp:      item.whatsapp      || '',
+          tecnico:       item.tecnico       || '',
+          medidor:       item.medidor       || '',
+          tipo:          item.tipo          || '',
+          obs:           item.obs           || '',
+          gps:           item.gps           || 'Sem GPS',
+          dataHora:      item.dataHora      || '',
+          statusVal:     '',
+          tipoMedidor:   item.tipoMedidor   || '',
+          tipoMedidorId: item.tipoMedidorId || ''
         });
 
         const resultado = await jsonpRequest(
