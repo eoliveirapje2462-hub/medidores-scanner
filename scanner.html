@@ -1362,58 +1362,41 @@ function registrar() {
 
   const salvarComGPS = (gps) => {
     const agora = new Date();
+    const tipoMed = currentTipoMedidor
+      ? TIPOS_MEDIDOR.find(t => t.id === currentTipoMedidor)
+      : null;
+
     const novoRegistro = {
-      id:           Date.now(),
+      id:              Date.now(),
       num,
-      tipo:         currentTipo,
+      tipo:            currentTipo,
+      tipoMedidorId:   currentTipoMedidor || null,
+      tipoMedidorNome: tipoMed ? tipoMed.nome : null,
+      tipoMedidorIcon: tipoMed ? tipoMed.icon : null,
       obs,
       gps,
-      data:         agora.toLocaleDateString('pt-BR'),
-      hora:         agora.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
-      tecnico:      tecnico?.nome || 'Técnico',
-      sincronizado: false
+      data:            agora.toLocaleDateString('pt-BR'),
+      hora:            agora.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }),
+      tecnico:         tecnico?.nome || 'Técnico',
+      sincronizado:    false
     };
 
     registros.unshift(novoRegistro);
     saveRegistros(registros);
 
-    // Se veio do estoque, atualiza a quantidade
-    if (window._estoqueContexto) {
-      const ctx     = window._estoqueContexto;
-      const estoque = getEstoque();
-      const limites = getLimites();
-      const qtd     = estoque[ctx.tipoId] || 0;
-      if (ctx.movimento === 'Entrada') {
-        estoque[ctx.tipoId] = qtd + 1;
-      } else {
-        estoque[ctx.tipoId] = Math.max(0, qtd - 1);
-      }
-      salvarEstoque(estoque);
-      const novaQtd = estoque[ctx.tipoId];
-      if (novaQtd <= ALERTA_MINIMO) {
-        setTimeout(() => toast(`⚠️ ${ctx.tipoNome}: apenas ${novaQtd} unidade(s)! Repor em breve.`, 'warn'), 1500);
-      }
-      window._estoqueContexto = null;
-    }
+    // Verifica alertas de estoque após registrar
+    if (novoRegistro.tipoMedidorId) {
+      const estoqueAtual = calcularEstoque();
+      const limites      = getLimites();
+      const qtd          = estoqueAtual[novoRegistro.tipoMedidorId] || 0;
+      const minimo       = limites[novoRegistro.tipoMedidorId] || ALERTA_MINIMO;
+      const maximo       = limites[`max_${novoRegistro.tipoMedidorId}`] || LIMITE_PADRAO;
+      const tipoNome     = novoRegistro.tipoMedidorNome || '';
 
-    // Atualiza estoque pelo tipo de medidor selecionado
-    if (currentTipoMedidor) {
-      const estoque = getEstoque();
-      const limites = getLimites();
-      const qtd     = estoque[currentTipoMedidor] || 0;
-      const limite  = limites[currentTipoMedidor] || LIMITE_PADRAO;
-      const tipo    = TIPOS_MEDIDOR.find(t => t.id === currentTipoMedidor);
-
-      if (novoRegistro.tipo === 'Entrada') {
-        estoque[currentTipoMedidor] = Math.min(limite, qtd + 1);
-      } else {
-        estoque[currentTipoMedidor] = Math.max(0, qtd - 1);
-      }
-      salvarEstoque(estoque);
-
-      const novaQtd = estoque[currentTipoMedidor];
-      if (novaQtd <= ALERTA_MINIMO) {
-        setTimeout(() => toast(`⚠️ Estoque baixo: ${tipo.nome} com apenas ${novaQtd} unidade(s)!`, 'warn'), 1500);
+      if (novoRegistro.tipo === 'Entrada' && qtd >= maximo) {
+        setTimeout(() => toast(`🔴 ${tipoNome}: limite máximo (${maximo}) atingido!`, 'warn'), 1000);
+      } else if (novoRegistro.tipo === 'Saída' && qtd <= minimo) {
+        setTimeout(() => toast(`⚠️ ${tipoNome}: estoque baixo — apenas ${qtd} unidade(s)!`, 'warn'), 1000);
       }
     }
 
@@ -1501,6 +1484,7 @@ function renderHistorico() {
       <div class="hist-tipo-badge ${badgeClass}">${badgeIcon}</div>
       <div class="hist-info">
         <div class="hist-num">${r.num}${isErro ? ' <span style="color:var(--red);font-size:10px;font-family:sans-serif;">ERRO</span>' : ''}</div>
+        ${r.tipoMedidorNome ? `<div style="font-size:11px;font-weight:600;color:var(--accent);margin-top:2px;">${r.tipoMedidorIcon || ''} ${r.tipoMedidorNome}</div>` : ''}
         <div class="hist-meta">${r.tipo} · ${r.data} ${r.hora} · ${r.tecnico}</div>
         ${r.gps && r.gps !== 'Sem GPS' ? `<div class="hist-obs">📍 ${r.gps}</div>` : ''}
         ${r.obs ? `<div class="hist-obs">${r.obs}</div>` : ''}
@@ -1740,12 +1724,21 @@ const ALERTA_MINIMO   = 3;
 
 let tipoEstoqueSelecionado = null;
 
-function getEstoque() {
-  try { return JSON.parse(localStorage.getItem('mc_estoque') || '{}'); } catch { return {}; }
-}
+// Estoque é sempre calculado do histórico — nunca contador manual
+function calcularEstoque() {
+  const registros = getRegistros();
+  const estoque   = {};
 
-function salvarEstoque(est) {
-  localStorage.setItem('mc_estoque', JSON.stringify(est));
+  TIPOS_MEDIDOR.forEach(t => { estoque[t.id] = 0; });
+
+  registros.forEach(r => {
+    if (!r.tipoMedidorId || r.erro) return; // ignora sem tipo ou marcados como erro
+    if (!estoque.hasOwnProperty(r.tipoMedidorId)) return;
+    if (r.tipo === 'Entrada') estoque[r.tipoMedidorId]++;
+    else if (r.tipo === 'Saída') estoque[r.tipoMedidorId] = Math.max(0, estoque[r.tipoMedidorId] - 1);
+  });
+
+  return estoque;
 }
 
 function getLimites() {
@@ -1757,15 +1750,15 @@ function salvarLimites(lim) {
 }
 
 function renderEstoque() {
-  const estoque = getEstoque();
+  const estoque = calcularEstoque(); // sempre do histórico
   const limites = getLimites();
   const cardsEl = document.getElementById('estoque-cards');
   if (!cardsEl) return;
 
   cardsEl.innerHTML = TIPOS_MEDIDOR.map(t => {
     const qtd    = estoque[t.id] || 0;
-    const minimo = limites[t.id] || ALERTA_MINIMO;
-    const maximo = (limites[`max_${t.id}`]) || LIMITE_PADRAO;
+    const minimo = limites[t.id]           || ALERTA_MINIMO;
+    const maximo = limites[`max_${t.id}`]  || LIMITE_PADRAO;
     const pct    = Math.min(100, Math.round((qtd / maximo) * 100));
     const estado = qtd >= maximo ? 'cheio' : qtd <= minimo ? 'alerta' : 'ok';
     const msg    = estado === 'cheio'  ? '🔴 Limite máximo atingido'
@@ -1910,12 +1903,12 @@ function editarLimite(id) {
 }
 
 function verificarAlertasEstoque() {
-  const estoque = getEstoque();
+  const estoque = calcularEstoque();
   const limites = getLimites();
   const alertas = TIPOS_MEDIDOR.filter(t => {
     const qtd    = estoque[t.id] || 0;
     const minimo = limites[t.id] || ALERTA_MINIMO;
-    return qtd > 0 && qtd <= minimo;
+    return qtd <= minimo;
   });
   if (alertas.length > 0) {
     setTimeout(() => {
