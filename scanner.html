@@ -1732,10 +1732,17 @@ function calcularEstoque() {
   TIPOS_MEDIDOR.forEach(t => { estoque[t.id] = 0; });
 
   registros.forEach(r => {
-    if (!r.tipoMedidorId || r.erro) return; // ignora sem tipo ou marcados como erro
+    if (!r.tipoMedidorId || r.erro) return;
     if (!estoque.hasOwnProperty(r.tipoMedidorId)) return;
-    if (r.tipo === 'Entrada') estoque[r.tipoMedidorId]++;
-    else if (r.tipo === 'Saída') estoque[r.tipoMedidorId] = Math.max(0, estoque[r.tipoMedidorId] - 1);
+
+    const mov = String(r.tipo || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    if (mov === 'entrada') {
+      estoque[r.tipoMedidorId]++;
+    } else if (mov === 'saida') {
+      estoque[r.tipoMedidorId] = Math.max(0, estoque[r.tipoMedidorId] - 1);
+    }
   });
 
   return estoque;
@@ -2006,8 +2013,15 @@ function gerarTextoRelatorio() {
   const saidas   = registros.filter(r => r.tipo === 'Saída');
   const saldo    = entradas.length - saidas.length;
 
-  const formatarItem = r =>
-    `• ${r.num} — ${r.hora}${r.obs ? ' — ' + r.obs : ''}`;
+  const formatarItem = r => {
+    let linha = `• ${r.num} — ${r.hora}`;
+    if (r.tipoMedidorNome) linha += ` — ${r.tipoMedidorIcon || ''} ${r.tipoMedidorNome}`;
+    if (r.obs && r.obs !== 'Estoque' && r.obs !== 'Recebimento em lote') linha += ` — ${r.obs}`;
+    if (r.gps && r.gps !== 'Sem GPS' && r.gps !== 'Recebimento em estoque') {
+      linha += `\n  📍 https://maps.google.com/?q=${r.gps}`;
+    }
+    return linha;
+  };
 
   let texto = `📋 *Relatório do Dia — Meter Control*\n`;
   texto    += `👤 ${tecnico?.nome || 'Técnico'}\n`;
