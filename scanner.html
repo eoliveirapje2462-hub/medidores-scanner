@@ -1335,6 +1335,8 @@ function registrar() {
   const obs = document.getElementById('campo-obs').value.trim();
   if (!num) { toast('Informe o número do medidor.', 'error'); return; }
   if (!currentTipo) { toast('Selecione Entrada ou Saída.', 'error'); return; }
+  if (!currentTipoMedidor) { toast('Selecione o tipo de medidor.', 'error'); return; }
+
   const registros = getRegistros();
 
   // Bloqueia saída se não houver entrada válida para este medidor
@@ -1345,6 +1347,18 @@ function registrar() {
       tocarBip('erro');
       if (navigator.vibrate) navigator.vibrate([100,50,100,50,100]);
       toast('❌ Este medidor não tem entrada registrada!', 'error');
+      return;
+    }
+
+    // Verifica se tem estoque disponível do tipo selecionado
+    const estoqueAtual = calcularEstoque();
+    const qtdDisponivel = estoqueAtual[currentTipoMedidor] || 0;
+    if (qtdDisponivel <= 0) {
+      document.getElementById('campo-medidor').classList.add('error');
+      tocarBip('erro');
+      if (navigator.vibrate) navigator.vibrate([100,50,100,50,100]);
+      const tipoNome = TIPOS_MEDIDOR.find(t => t.id === currentTipoMedidor)?.nome || '';
+      toast(`❌ Estoque zerado para ${tipoNome}!`, 'error');
       return;
     }
   }
