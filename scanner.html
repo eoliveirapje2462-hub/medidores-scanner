@@ -1764,7 +1764,6 @@ let tipoEstoqueSelecionado = null;
 
 // Estoque é sempre calculado do histórico — nunca contador manual
 function calcularEstoque() {
-  // Remove cache antigo que pode estar causando conflito
   localStorage.removeItem('mc_estoque');
 
   const registros = getRegistros();
@@ -1773,16 +1772,26 @@ function calcularEstoque() {
   TIPOS_MEDIDOR.forEach(t => { estoque[t.id] = 0; });
 
   registros.forEach(r => {
-    if (!r.tipoMedidorId || r.erro) return;
-    if (!estoque.hasOwnProperty(r.tipoMedidorId)) return;
+    if (r.erro) return;
+
+    // Tenta obter o tipoMedidorId — direto ou pelo nome
+    let tipoId = r.tipoMedidorId || null;
+    if (!tipoId && r.tipoMedidorNome) {
+      const found = TIPOS_MEDIDOR.find(t =>
+        t.nome.toLowerCase() === String(r.tipoMedidorNome).toLowerCase()
+      );
+      if (found) tipoId = found.id;
+    }
+
+    if (!tipoId || !estoque.hasOwnProperty(tipoId)) return;
 
     const mov = String(r.tipo || '').trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
     if (mov === 'entrada') {
-      estoque[r.tipoMedidorId]++;
+      estoque[tipoId]++;
     } else if (mov === 'saida') {
-      estoque[r.tipoMedidorId] = Math.max(0, estoque[r.tipoMedidorId] - 1);
+      estoque[tipoId] = Math.max(0, estoque[tipoId] - 1);
     }
   });
 
