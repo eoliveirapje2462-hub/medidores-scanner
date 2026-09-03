@@ -829,18 +829,22 @@ async function carregarRegistrosDaNuvem() {
       let novos = 0;
       resultado.registros.forEach(r => {
         // Converte dataHora da nuvem para data e hora locais
-        const partes = String(r.dataHora || '').split(' ');
-        let data = partes[0] || '';
-        let hora = partes[1] || '';
+        let data = '';
+        let hora = '';
 
-        if (data && !/^\d{2}\/\d{2}\/\d{4}$/.test(data)) {
-          try {
-            const d = new Date(r.dataHora);
-            if (!isNaN(d.getTime())) {
-              data = d.toLocaleDateString('pt-BR');
-              hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            }
-          } catch (_) {}
+        try {
+          const d = new Date(r.dataHora);
+          if (!isNaN(d.getTime())) {
+            data = d.toLocaleDateString('pt-BR');
+            hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          }
+        } catch (_) {}
+
+        // Fallback: tenta split direto se já vier no formato correto
+        if (!data) {
+          const partes = String(r.dataHora || '').split(' ');
+          data = partes[0] || '';
+          hora = partes[1] || '';
         }
 
         const chave = `${r.num}|${r.tipo}|${data}|${(hora||'').substring(0,5)}`;
