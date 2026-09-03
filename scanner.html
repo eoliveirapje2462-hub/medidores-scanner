@@ -438,6 +438,7 @@
         <option value="Saída">Saídas</option>
       </select>
       <button class="btn-print" style="flex:1;margin:0;" onclick="imprimirRelatorio()">🖨 Imprimir</button>
+      <button onclick="carregarRegistrosDaNuvem()" style="background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:#60a5fa;border-radius:var(--radius-sm);font-size:13px;padding:9px 12px;cursor:pointer;font-family:var(--font);">☁️</button>
       <button class="btn-clear-hist" onclick="limparHistorico()">🗑</button>
     </div>
     <button onclick="enviarRelatorioManual()" style="
@@ -813,22 +814,25 @@ function initApp() {
 // ══════════════════════════════════════════
 async function carregarRegistrosDaNuvem() {
   try {
+    toast('☁️ Carregando da planilha...', '');
     const resultado = await jsonpRequest(
       `${APPS_SCRIPT_URL}?action=buscar&whatsapp=${encodeURIComponent(tecnico?.whatsapp || '')}&dias=30`,
-      10000
+      15000
     );
 
     if (resultado.status === 'ok' && Array.isArray(resultado.registros)) {
+      if (resultado.registros.length === 0) {
+        const fila = getFilaSync();
+        if (fila.length > 0) sincronizarAgora();
+        return;
+      }
+
       const locais = getRegistros();
-
-      // Chave única: medidor + tipo + data + hora (primeiros 5 chars)
       const chaveLocal = r => `${r.num}|${r.tipo}|${r.data}|${(r.hora||'').substring(0,5)}`;
-
       const chavesLocais = new Set(locais.map(chaveLocal));
 
       let novos = 0;
       resultado.registros.forEach(r => {
-        // Converte dataHora da nuvem para data e hora locais
         let data = '';
         let hora = '';
 
@@ -840,7 +844,6 @@ async function carregarRegistrosDaNuvem() {
           }
         } catch (_) {}
 
-        // Fallback: tenta split direto se já vier no formato correto
         if (!data) {
           const partes = String(r.dataHora || '').split(' ');
           data = partes[0] || '';
@@ -873,23 +876,29 @@ async function carregarRegistrosDaNuvem() {
         }
       });
 
+      // Ordena sempre por mais recente
+      locais.sort((a, b) => {
+        const fa = (a.data||'').split('/').reverse().join('-') + 'T' + (a.hora||'00:00');
+        const fb = (b.data||'').split('/').reverse().join('-') + 'T' + (b.hora||'00:00');
+        return new Date(fb) - new Date(fa);
+      });
+      saveRegistros(locais);
+      renderHistorico();
+
       if (novos > 0) {
-        // Ordena por mais recente
-        locais.sort((a, b) => {
-          const fa = (a.data||'').split('/').reverse().join('-') + 'T' + (a.hora||'00:00');
-          const fb = (b.data||'').split('/').reverse().join('-') + 'T' + (b.hora||'00:00');
-          return new Date(fb) - new Date(fa);
-        });
-        saveRegistros(locais);
-        renderHistorico();
         toast(`☁️ ${novos} registro(s) carregado(s) da planilha.`, 'success');
+      } else {
+        toast(`☁️ Histórico atualizado.`, 'success');
       }
 
       // Sincroniza fila pendente
       const fila = getFilaSync();
       if (fila.length > 0) sincronizarAgora();
+    } else {
+      toast('⚠️ Erro ao carregar da planilha.', 'warn');
     }
   } catch (e) {
+    toast('⚠️ Sem conexão com a planilha.', 'warn');
     const fila = getFilaSync();
     if (fila.length > 0 && navigator.onLine) sincronizarAgora();
   }
